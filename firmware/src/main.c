@@ -1,4 +1,5 @@
 #include "board.h"
+#include "dmoc645.h"
 
 // -------------------------------------------------------------
 // Macro Definitions
@@ -93,7 +94,7 @@ void sendOne(void){
 	msg_obj.data[4] = 0x00; // Not Used
 	msg_obj.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
 	msg_obj.data[6] = heartVal; // alive time, gear, state
-	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
 
 	LPC_CCAN_API->can_transmit(&msg_obj);
 }
@@ -110,7 +111,7 @@ void sendTwo(void){
 	msg_obj.data[4] = 0x75; // Standby Torque: Value 0
 	msg_obj.data[5] = 0x30; // Standby Torque: Value 0
 	msg_obj.data[6] = heartVal; // Alive time
-	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
 	LPC_CCAN_API->can_transmit(&msg_obj);
 }
 
@@ -126,7 +127,7 @@ void sendThree(void){
 	msg_obj.data[4] = 0x00; // Not certain (other code says not used)
 	msg_obj.data[5] = 0x60; // Something relating to temperature? Not much info
 	msg_obj.data[6] = heartVal; // Alive time
-	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
 	LPC_CCAN_API->can_transmit(&msg_obj);
 }
 
@@ -217,6 +218,8 @@ int main(void)
 	
 	uint32_t lasttime = msTicks;
 
+	DMOC_OP_STATE_T state;
+	DMOC_HV_STAT_T hvstat;
 	while (1) {
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			CCAN_MSG_OBJ_T temp_msg;
@@ -224,10 +227,38 @@ int main(void)
 			Board_UART_Print("Received Message ID: 0x");
 			itoa(temp_msg.mode_id, str, 16);
 			Board_UART_Println(str);
+			
+			DMOC_Decode_State(&temp_msg,&state);
+			if (temp_msg.mode_id == DMOC_STATE_ID){
+				Board_UART_Println("STATE:");
+				if(state.op_stat == ON){
+					Board_UART_Println("ON");
+				}
+				else if (state.op_stat == OFF){
+					Board_UART_Println("OFF");
+				}
+				else if (state.op_stat == POWERUP){
+					Board_UART_Println("Powerup");
+				}
+				else if (state.op_stat == FAULT){
+					Board_UART_Println("Fault");
+				}
+				Board_UART_Print("Speed: ");
+				Board_UART_PrintNum(state.speed,10,true);
+			}	
+			else if(temp_msg.mode_id == DMOC_HV_STAT_ID){
+				Board_UART_Println("High Voltage State:");
+				DMOC_Decode_HV_Status(&temp_msg, &hvstat);
+				Board_UART_Print("HV Voltage: ");
+				Board_UART_PrintNum(hvstat.hv_voltage, 10, true);
+				Board_UART_Print("HV Current: ");
+				Board_UART_PrintNum(hvstat.hv_current, 10, true);
+			}
+			else if (temp_msg.mode_id == DMOC_TORQUE_STAT_ID){
+				Board_UART_Println("Torque Status: ");
+				Board_UART_PrintNum(DMOC_Decode_Torque_Status(&temp_msg),10,true);
 
-			Board_UART_Print("\t0x");
-			itoa(temp_msg.data_16[0], str, 16);
-			Board_UART_Println(str);
+			}
 
 		}
 
@@ -238,14 +269,14 @@ int main(void)
 			Board_UART_Println(str);
 		}
 
-		if(lasttime < msTicks-500){
+/*		if(lasttime < msTicks-500){
 			lasttime = msTicks;
 			sendOne();
 			sendTwo();
 			sendThree();
 			heartVal = (heartVal+2) & 0x0F;
 		}
-
+*/
 		uint8_t count;
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
 			Board_UART_SendBlocking(uart_rx_buffer, count); // Echo user input

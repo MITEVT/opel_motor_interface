@@ -26,7 +26,7 @@ typedef struct {
 	int16_t speed;
 } DMOC_OP_STATE_T;
 
-int8_t DMOV_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state);
+int8_t DMOC_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state);
 
 #define DMOC_ELEC_STATE_ID 0x23E
 

@@ -19,7 +19,7 @@ int32_t DMOC_Decode_Torque_Status(CCAN_MSG_OBJ_T *msg_obj) {
 	return ((msg_obj->data[0] << 8) | msg_obj->data[1]) - 30000;
 }
 
-int8_t DMOV_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state) {
+int8_t DMOC_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state) {
 	if (msg_obj->mode_id != DMOC_STATE_ID) return -1;
 
 	state->speed = ((msg_obj->data[0] << 8) | msg_obj->data[1]) - 20000;
