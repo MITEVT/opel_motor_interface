@@ -292,7 +292,7 @@ $(ELF) : $(LD_SCRIPT)
 $(TEST_TARGET) : $(TEST_OBJS)	
 	echo $(C_SRCS_TEST)
 	@echo 'Linking test target: $(TEST_TARGET)'
-	$(CXX) $(LD_FLAGS_F_TEST) $(TEST_OBJS) $(LIBS) -o $@
+	$(CC) $(LD_FLAGS_F_TEST) $(TEST_OBJS) $(LIBS) -o $@
 	@echo ' '
 
 
@@ -303,7 +303,7 @@ $(TEST_TARGET) : $(TEST_OBJS)
 
 $(ELF) : $(OBJS_F)
 	@echo 'Linking target: $(ELF)'
-	$(CXX) $(LD_FLAGS_F) $(OBJS_F) $(LIBS) -o $@
+	$(CC) $(LD_FLAGS_F) $(OBJS_F) $(LIBS) -o $@
 	@echo ' '
 
 #-----------------------------------------------------------------------------#
@@ -312,7 +312,7 @@ $(ELF) : $(OBJS_F)
 
 $(OUT_DIR_F)%.o : %.$(CXX_EXT)
 	@echo 'Compiling file: $<'
-	$(CXX) -c $(CXX_FLAGS_F) $< -o $@
+	$(CC) -c $(CC_FLAGS_F) $< -o $@
 	@echo ' '
 
 #-----------------------------------------------------------------------------#

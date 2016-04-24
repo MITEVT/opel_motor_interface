@@ -8,8 +8,8 @@
 // -------------------------------------------------------------
 // Global Variables
 
-extern const uint32_t OscRateIn; 
-volatile uint32_t msTicks; 						// Running count of milliseconds since start
+extern const uint32_t OscRateIn; 				/** @brief Board Oscillator Frequency (Hz) **/
+volatile uint32_t msTicks; 						/** @brief System Time (ms) **/
 
 // -------------------------------------------------------------
 // Configuration Macros
@@ -19,7 +19,7 @@ volatile uint32_t msTicks; 						// Running count of milliseconds since start
 // Pin Descriptions
 
 #define LED0_PORT 2
-#define LED0_PIN 10
+#define LED0_PIN 5
 
 #define LED1_PORT 0
 #define LED1_PIN 6
@@ -41,12 +41,17 @@ volatile uint32_t msTicks; 						// Running count of milliseconds since start
 #define UART_RX UART_RX_PORT, UART_RX_PIN
 #define UART_TX UART_TX_PORT, UART_TX_PIN
 
-#define Board_LED_On(led) Chip_GPIO_SetPinState(LPC_GPIO, led, true)
-#define Board_LED_Off(led) Chip_GPIO_SetPinState(LPC_GPIO, led, false)
+#define Board_LED_On(led) {Chip_GPIO_SetPinState(LPC_GPIO, led, true);}
+#define Board_LED_Off(led) {Chip_GPIO_SetPinState(LPC_GPIO, led, false);}
  
 // -------------------------------------------------------------
 // Board Level Function Prototypes
 
+/**
+ * Initialize the Core Systick Timer
+ * 
+ * @return true if error
+ */
 int8_t Board_SysTick_Init(void);
 
 void Board_LEDs_Init(void);
