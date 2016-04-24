@@ -23,6 +23,8 @@ static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
 static bool can_error_flag;
 static uint32_t can_error_info;
 
+static uint8_t heartVal = 0;
+
 // -------------------------------------------------------------
 // Helper Functions
 
@@ -67,6 +69,67 @@ void CAN_error(uint32_t error_info) {
 	can_error_flag = true;
 }
 
+uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
+    uint8_t cs;
+    uint8_t i;
+    cs = msg.mode_id;
+    for (i = 0; i < 7; i++)
+        cs += msg.data[i];
+    i = cs + 3;
+    cs = ((int) 256 - i);
+    return cs;
+}
+
+
+void sendOne(void){
+//	Board_UART_Println("Sending CAN with ID: 0x232");
+	msg_obj.msgobj = 2;
+	msg_obj.mode_id = 0x232;
+	msg_obj.dlc = 8;
+	msg_obj.data[0] = (20000 & 0xFF00)>>8;	// Speed Request: MSB
+	msg_obj.data[1] = (20000 & 0xFF); // Speed Request: LSB
+	msg_obj.data[2] = 0x00; // Not Used
+	msg_obj.data[3] = 0x00; // Not Used
+	msg_obj.data[4] = 0x00; // Not Used
+	msg_obj.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
+	msg_obj.data[6] = heartVal; // alive time, gear, state
+	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+
+	LPC_CCAN_API->can_transmit(&msg_obj);
+}
+
+void sendTwo(void){
+//	Board_UART_Println("Sending CAN with ID: 0x233");
+	msg_obj.msgobj = 2;
+	msg_obj.mode_id = 0x233;
+	msg_obj.dlc = 8;
+	msg_obj.data[0] = 0x75;	// Torque Request
+	msg_obj.data[1] = 0x30;	// Torque Request
+	msg_obj.data[2] = 0x75; // Torque Request
+	msg_obj.data[3] = 0x30; // Torque Request
+	msg_obj.data[4] = 0x75; // Standby Torque: Value 0
+	msg_obj.data[5] = 0x30; // Standby Torque: Value 0
+	msg_obj.data[6] = heartVal; // Alive time
+	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+	LPC_CCAN_API->can_transmit(&msg_obj);
+}
+
+void sendThree(void){
+//	Board_UART_Println("Sending CAN with ID: 0x234");
+	msg_obj.msgobj = 2;
+	msg_obj.mode_id = 0x234;
+	msg_obj.dlc = 8;
+	msg_obj.data[0] = 0x00;	// Regen Power MSB
+	msg_obj.data[1] = 0x00;	// Regen Power LSB
+	msg_obj.data[2] = 0x00; // Accel Power MSB
+	msg_obj.data[3] = 0x00; // Accel Power LSB
+	msg_obj.data[4] = 0x00; // Not certain (other code says not used)
+	msg_obj.data[5] = 0x60; // Something relating to temperature? Not much info
+	msg_obj.data[6] = heartVal; // Alive time
+	msg_obj.data[7] = calcChecksum(msg_obj); // Checksum
+	LPC_CCAN_API->can_transmit(&msg_obj);
+}
+
 // -------------------------------------------------------------
 // Interrupt Service Routines
 
@@ -78,14 +141,8 @@ int main(void)
 {
 
 	//---------------
-	// Initialize UART Communication
-	Board_UART_Init(UART_BAUD_RATE);
-	Board_UART_Println("Started up");
-
-	//---------------
 	// Initialize SysTick Timer to generate millisecond count
 	if (Board_SysTick_Init()) {
-		Board_UART_Println("Failed to Initialize SysTick. ");
 		// Unrecoverable Error. Hang.
 		while(1);
 	}
@@ -94,6 +151,11 @@ int main(void)
 	// Initialize GPIO and LED as output
 	Board_LEDs_Init();
 	Board_LED_On(LED0);
+
+	//---------------
+	// Initialize UART Communication
+	Board_UART_Init(UART_BAUD_RATE);
+	Board_UART_Println("Started up");
 
 	//---------------
 	// Initialize CAN  and CAN Ring Buffer
@@ -152,6 +214,8 @@ int main(void)
 
 	can_error_flag = false;
 	can_error_info = 0;
+	
+	uint32_t lasttime = msTicks;
 
 	while (1) {
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
@@ -165,7 +229,7 @@ int main(void)
 			itoa(temp_msg.data_16[0], str, 16);
 			Board_UART_Println(str);
 
-		}	
+		}
 
 		if (can_error_flag) {
 			can_error_flag = false;
@@ -174,55 +238,35 @@ int main(void)
 			Board_UART_Println(str);
 		}
 
+		if(lasttime < msTicks-500){
+			lasttime = msTicks;
+			sendOne();
+			sendTwo();
+			sendThree();
+			heartVal = (heartVal+2) & 0x0F;
+		}
+
 		uint8_t count;
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
 			Board_UART_SendBlocking(uart_rx_buffer, count); // Echo user input
 			switch (uart_rx_buffer[0]) {
 				case 'a':
-					Board_UART_Println("Sending CAN with ID: 0x600");
+					Board_UART_Println("Sending CAN with ID: 0x232");
 					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x703;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 300;
+					msg_obj.mode_id = 0x232;
+					msg_obj.dlc = 8;
+					msg_obj.data[0] = 0x00;	// Speed Request
+					msg_obj.data[1] = 0x00; // Speed Request
+					msg_obj.data[2] = 0x00; // Not Used
+					msg_obj.data[3] = 0x00; // Not Used
+					msg_obj.data[4] = 0x00; // Not Used
+					msg_obj.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
+					msg_obj.data[6] = 0x00; // alive time, gear, state
+					msg_obj.data[7] = 0x00; // Still confused
+
 					LPC_CCAN_API->can_transmit(&msg_obj);
 					break;
-				case 'b':
-					Board_UART_Println("Sending CAN with ID: 0x600");
-					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x703;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 600;
-					LPC_CCAN_API->can_transmit(&msg_obj);
-					break;
-				case 'c':
-					Board_UART_Println("Sending CAN with ID: 0x600");
-					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x703;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 0;
-					LPC_CCAN_API->can_transmit(&msg_obj);
-					break;
-				case 'd':
-					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x700;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 0;
-					LPC_CCAN_API->can_transmit(&msg_obj);
-					break;
-				case 'e':
-					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x700;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 32000;
-					LPC_CCAN_API->can_transmit(&msg_obj);
-					break;
-				case 'f':
-					msg_obj.msgobj = 2;
-					msg_obj.mode_id = 0x700;
-					msg_obj.dlc = 2;
-					msg_obj.data_16[0] = 65500;
-					LPC_CCAN_API->can_transmit(&msg_obj);
-					break;
+
 				default:
 					Board_UART_Println("Invalid Command");
 					break;
