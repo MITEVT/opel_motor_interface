@@ -1,3 +1,5 @@
+#include "chip.h"
+
 #ifndef _DMOC645_H_
 #define _DMOC645_H_
 
@@ -15,7 +17,7 @@ int8_t DMOC_Decode_HV_Status(CCAN_MSG_OBJ_T *msg_obj, DMOC_HV_STAT_T *hv_stat);
 #define DMOC_TEMP_STAT_ID 0x651
 #define DMOC_TORQUE_STAT_ID 0x23A
 
-int32_t DMOC_Decode_Torque_Status(CCAN_MSG_OBJ *msg_obj);
+int32_t DMOC_Decode_Torque_Status(CCAN_MSG_OBJ_T *msg_obj);
 
 #define DMOC_STATE_ID 0x23B
 
@@ -24,8 +26,10 @@ typedef struct {
 	int16_t speed;
 } DMOC_OP_STATE_T;
 
-int8_t DMOV_Decode_State(CCAN_MSG_OBJ *msg_obj, DMOC_OP_STATE_T *state);
+int8_t DMOV_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state);
 
 #define DMOC_ELEC_STATE_ID 0x23E
+
+uint8_t DMOC_Checksum(CCAN_MSG_OBJ_T msg);
 
 #endif
