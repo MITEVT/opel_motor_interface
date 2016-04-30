@@ -99,10 +99,14 @@ void CAN_baudrate_calculate(uint32_t baud_rate, uint32_t *can_api_timing_cfg)
 	}
 }
 
+
 void Board_CAN_Init(uint32_t baudrate, void (*rx_callback)(uint8_t), void (*tx_callback)(uint8_t), void (*error_callback)(uint32_t)) {
 
+
+	Chip_SYSCTL_AssertPeriphReset(RESET_CAN0);
+
 	uint32_t can_api_timing_cfg[2];
-	
+
 	CCAN_CALLBACKS_T callbacks = {
 		rx_callback,
 		tx_callback,

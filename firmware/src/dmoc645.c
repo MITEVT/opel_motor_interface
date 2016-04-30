@@ -23,22 +23,29 @@ int8_t DMOC_Decode_State(CCAN_MSG_OBJ_T *msg_obj, DMOC_OP_STATE_T *state) {
 	if (msg_obj->mode_id != DMOC_STATE_ID) return -1;
 
 	state->speed = ((msg_obj->data[0] << 8) | msg_obj->data[1]) - 20000;
-
 	switch (msg_obj->data[6] >> 4) {
 		case 0:
 			state->op_stat = POWERUP;
 			break;
 		case 1:
-			state->op_stat = OFF;
+			state->op_stat = DISABLED;
 			break;
 		case 2:
-			state->op_stat = ON;
+			state->op_stat = STANDBY;
 			break;
 		case 3:
+			state->op_stat = ENABLED;
+			break;
+		case 4:
+			state->op_stat = POWERDOWN;
+			break;
+		case 5:
 			state->op_stat = FAULT;
 			break;
+		case 6:
+			state->op_stat = CRITICAL_FAULT;
+			break;
 	}
-
 	return 0;
 }
 
