@@ -18,6 +18,12 @@ static CCAN_MSG_OBJ_T msg_obj; 					// Message Object data structure for manipul
 static RINGBUFF_T can_rx_buffer;				// Ring Buffer for storing received CAN messages
 static CCAN_MSG_OBJ_T _rx_buffer[BUFFER_SIZE]; 	// Underlying array used in ring buffer
 
+static CCAN_MSG_OBJ_T msg_obj1; 					// Message Object data structure for manipulating CAN messages
+static CCAN_MSG_OBJ_T msg_obj2; 					// Message Object data structure for manipulating CAN messages
+static CCAN_MSG_OBJ_T msg_obj3; 					// Message Object data structure for manipulating CAN messages
+
+static CCAN_MSG_OBJ_T msg_obj4; 					// Message Object data structure for manipulating CAN messages
+
 static char str[100];							// Used for composing UART messages
 static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
 
@@ -25,6 +31,16 @@ static bool can_error_flag;
 static uint32_t can_error_info;
 
 static uint8_t heartVal = 0;
+
+static DMOC_OP_STATE_T state;
+static DMOC_HV_STAT_T hvstat;
+static uint16_t torqueStat;
+static uint32_t messagesRecieved;
+
+static uint8_t targetState;
+static uint8_t targetGear;
+static uint16_t targetSpeed;
+static uint16_t targetTorque;
 
 // -------------------------------------------------------------
 // Helper Functions
@@ -84,60 +100,115 @@ uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
 
 void sendOne(void){
 //	Board_UART_Println("Sending CAN with ID: 0x232");
-	msg_obj.msgobj = 2;
-	msg_obj.mode_id = 0x232;
-	msg_obj.dlc = 8;
-	msg_obj.data[0] = (20000 & 0xFF00)>>8;	// Speed Request: MSB
-	msg_obj.data[1] = (20000 & 0xFF); // Speed Request: LSB
-	msg_obj.data[2] = 0x00; // Not Used
-	msg_obj.data[3] = 0x00; // Not Used
-	msg_obj.data[4] = 0x00; // Not Used
-	msg_obj.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
-	msg_obj.data[6] = heartVal; // alive time, gear, state
-	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
+	msg_obj1.msgobj = 2;
+	msg_obj1.mode_id = 0x232;
+	msg_obj1.dlc = 8;
+	msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+	msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
+	msg_obj1.data[2] = 0x00; // Not Used
+	msg_obj1.data[3] = 0x00; // Not Used
+	msg_obj1.data[4] = 0x00; // Not Used
+	msg_obj1.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
+	msg_obj1.data[6] = heartVal+(targetState<<6)+(targetGear<<4); // alive time, gear, state
+	msg_obj1.data[7] = DMOC_Checksum(msg_obj1); // Checksum
 
-	LPC_CCAN_API->can_transmit(&msg_obj);
+	LPC_CCAN_API->can_transmit(&msg_obj1);
 }
 
 void sendTwo(void){
 //	Board_UART_Println("Sending CAN with ID: 0x233");
-	msg_obj.msgobj = 2;
-	msg_obj.mode_id = 0x233;
-	msg_obj.dlc = 8;
-	msg_obj.data[0] = 0x75;	// Torque Request
-	msg_obj.data[1] = 0x30;	// Torque Request
-	msg_obj.data[2] = 0x75; // Torque Request
-	msg_obj.data[3] = 0x30; // Torque Request
-	msg_obj.data[4] = 0x75; // Standby Torque: Value 0
-	msg_obj.data[5] = 0x30; // Standby Torque: Value 0
-	msg_obj.data[6] = heartVal; // Alive time
-	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
-	LPC_CCAN_API->can_transmit(&msg_obj);
+	msg_obj2.msgobj = 2;
+	msg_obj2.mode_id = 0x233;
+	msg_obj2.dlc = 8;
+	msg_obj2.data[0] = ((0x7530+targetTorque) & 0xFF00)>>8;	// Torque Request
+	msg_obj2.data[1] = ((0x7530+targetTorque) & 0x00FF);	// Torque Request
+	msg_obj2.data[2] = 0x75; // Torque Request
+	msg_obj2.data[3] = 0x30; // Torque Request
+	msg_obj2.data[4] = 0x75; // Standby Torque: Value 0
+	msg_obj2.data[5] = 0x30; // Standby Torque: Value 0
+	msg_obj2.data[6] = heartVal; // Alive time
+	msg_obj2.data[7] = DMOC_Checksum(msg_obj2); // Checksum
+	LPC_CCAN_API->can_transmit(&msg_obj2);
 }
 
 void sendThree(void){
 //	Board_UART_Println("Sending CAN with ID: 0x234");
-	msg_obj.msgobj = 2;
-	msg_obj.mode_id = 0x234;
-	msg_obj.dlc = 8;
-	msg_obj.data[0] = 0x00;	// Regen Power MSB
-	msg_obj.data[1] = 0x00;	// Regen Power LSB
-	msg_obj.data[2] = 0x00; // Accel Power MSB
-	msg_obj.data[3] = 0x00; // Accel Power LSB
-	msg_obj.data[4] = 0x00; // Not certain (other code says not used)
-	msg_obj.data[5] = 0x60; // Something relating to temperature? Not much info
-	msg_obj.data[6] = heartVal; // Alive time
-	msg_obj.data[7] = DMOC_Checksum(msg_obj); // Checksum
-	LPC_CCAN_API->can_transmit(&msg_obj);
+	msg_obj3.msgobj = 2;
+	msg_obj3.mode_id = 0x234;
+	msg_obj3.dlc = 8;
+	msg_obj3.data[0] = 0x00;	// Regen Power MSB
+	msg_obj3.data[1] = 0x00;	// Regen Power LSB
+	msg_obj3.data[2] = 0x27; // Accel Power MSB
+	msg_obj3.data[3] = 0x00; // Accel Power LSB
+	msg_obj3.data[4] = 0x00; // Not certain (other code says not used)
+	msg_obj3.data[5] = 0x60; // Something relating to temperature? Not much info
+	msg_obj3.data[6] = heartVal; // Alive time
+	msg_obj3.data[7] = DMOC_Checksum(msg_obj3); // Checksum
+	LPC_CCAN_API->can_transmit(&msg_obj3);
 }
 
+
 void printMenu(void){
+	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("You are in a forest and encounter a strange metal box");
+	Board_UART_Print("You've recieved ");
+	Board_UART_PrintNum(messagesRecieved,10,false);
+	Board_UART_Println(" messages from your environment.");
 	Board_UART_Println("What do you do?");
-	Board_UART_Println("a) Listen to the box");
-	Board_UART_Println("b) Talk to the box");
-	Board_UART_Println("h) Examine your surroundings\n\n\n");
+	Board_UART_Println("v) Inspect high voltage");
+	Board_UART_Println("s) Discuss State of box");
+	Board_UART_Println("t) Inspect Torque Output");
+	Board_UART_Println("h) Examine your surroundings");
+	Board_UART_Println("---------------------------------------------\n\n");
 }
+
+void printState(void){
+	Board_UART_Println("---------------------------------------------");
+	Board_UART_Print("STATE: ");
+	if(state.op_stat == POWERUP){
+		Board_UART_Println("POWERUP");
+	}
+	else if (state.op_stat == DISABLED){
+		Board_UART_Println("DISABLED");
+	}
+	else if (state.op_stat == ENABLED){
+		Board_UART_Println("ENABLED");
+	}
+	else if (state.op_stat == POWERDOWN){
+		Board_UART_Println("POWERDOWN");
+	}
+	else if (state.op_stat == FAULT){
+		Board_UART_Println("FAULT");
+	}
+	else if (state.op_stat == CRITICAL_FAULT){
+		Board_UART_Println("Critical Fault");
+	}
+	else{
+		Board_UART_Print("0x");
+		Board_UART_PrintNum(state.op_stat,16,true);
+	}
+	Board_UART_Print("Speed: ");
+	Board_UART_PrintNum(state.speed,10,true);
+	Board_UART_Println("---------------------------------------------\n\n");
+}
+
+void printHVStuff(void){
+	Board_UART_Println("---------------------------------------------");
+	Board_UART_Println("High Voltage State:");
+	Board_UART_Print("HV Voltage: ");
+	Board_UART_PrintNum(hvstat.hv_voltage, 10, true);
+	Board_UART_Print("HV Current: ");
+	Board_UART_PrintNum(hvstat.hv_current, 10, true);
+	Board_UART_Println("---------------------------------------------");
+}
+
+void printTorqueStuff(void){
+	Board_UART_Println("---------------------------------------------");
+	Board_UART_Println("Torque Status: ");
+	Board_UART_PrintNum(torqueStat,10,true);
+	Board_UART_Println("---------------------------------------------\n\n");
+}
+
 
 // -------------------------------------------------------------
 // Interrupt Service Routines
@@ -148,7 +219,10 @@ void printMenu(void){
 
 int main(void)
 {
-
+	targetState = 0;
+	targetGear = 0;
+	targetSpeed = 0;
+	targetTorque = 0;
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
 	if (Board_SysTick_Init()) {
@@ -227,65 +301,24 @@ int main(void)
 	uint32_t lasttime = msTicks;
 
 	uint8_t count;
-	DMOC_OP_STATE_T state;
-	DMOC_HV_STAT_T hvstat;
+
 	bool menu=true;
 	bool listen=false;
+	messagesRecieved=0;
 	while (1) {
-		if(menu){
-			printMenu();
-			menu = false;
-		}
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			CCAN_MSG_OBJ_T temp_msg;
 			RingBuffer_Pop(&can_rx_buffer, &temp_msg);
-			if(listen){
-				Board_UART_Println("------------------------------------------------------\n\n------------------------------------------------------");
-				Board_UART_Print("Received Message ID: 0x");
-				itoa(temp_msg.mode_id, str, 16);
-				Board_UART_Println(str);
+			messagesRecieved++;
+				if (temp_msg.mode_id == DMOC_STATE_ID)
+					DMOC_Decode_State(&temp_msg,&state);
 
-				DMOC_Decode_State(&temp_msg,&state);
-				if (temp_msg.mode_id == DMOC_STATE_ID){
-					Board_UART_Print("STATE: ");
-					if(state.op_stat == POWERUP){
-						Board_UART_Println("POWERUP");
-					}
-					else if (state.op_stat == DISABLED){
-						Board_UART_Println("DISABLED");
-					}
-					else if (state.op_stat == ENABLED){
-						Board_UART_Println("ENABLED");
-					}
-					else if (state.op_stat == POWERDOWN){
-						Board_UART_Println("POWERDOWN");
-					}
-					else if (state.op_stat == FAULT){
-						Board_UART_Println("FAULT");
-					}
-					else if (state.op_stat == CRITICAL_FAULT){
-						Board_UART_Println("Critical Fault");
-					}
-					else{
-						Board_UART_Print("0x");
-						Board_UART_PrintNum(state.op_stat,16,true);
-					}
-					Board_UART_Print("Speed: ");
-					Board_UART_PrintNum(state.speed,10,true);
-				}
 				else if(temp_msg.mode_id == DMOC_HV_STAT_ID){
-					Board_UART_Println("High Voltage State:");
 					DMOC_Decode_HV_Status(&temp_msg, &hvstat);
-					Board_UART_Print("HV Voltage: ");
-					Board_UART_PrintNum(hvstat.hv_voltage, 10, true);
-					Board_UART_Print("HV Current: ");
-					Board_UART_PrintNum(hvstat.hv_current, 10, true);
 				}
 				else if (temp_msg.mode_id == DMOC_TORQUE_STAT_ID){
-					Board_UART_Println("Torque Status: ");
-					Board_UART_PrintNum(DMOC_Decode_Torque_Status(&temp_msg),10,true);
+					torqueStat = DMOC_Decode_Torque_Status(&temp_msg);
 
-				}
 			}
 
 		}
@@ -296,7 +329,7 @@ int main(void)
 			itoa(can_error_info, str, 2);
 			Board_UART_Println(str);
 
-			
+
 
 			Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);
 			msg_obj.msgobj = 1;
@@ -305,10 +338,12 @@ int main(void)
 			LPC_CCAN_API->config_rxmsgobj(&msg_obj);
 		}
 
-		if(lasttime < msTicks-100){
+		if(lasttime < msTicks-250){
 			lasttime = msTicks;
 			sendOne();
+			_delay(20);
 			sendTwo();
+			_delay(20);
 			sendThree();
 			heartVal = (heartVal+2) & 0x0F;
 		}
@@ -317,21 +352,51 @@ int main(void)
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
 			//Board_UART_SendBlocking(uart_rx_buffer, count); // Echo user input
 			switch (uart_rx_buffer[0]) {
-				case 'a':
-					Board_UART_Println("Toggling listening to the box");
-					listen=~listen;
+				case 's':
+					printState();
 					break;
-				case 'b':
-					Board_UART_Println("Talking to the box");
-					sendOne();
-					sendTwo();
-					sendThree();
+				case 'v':
+					printHVStuff();
+					break;
+				case 't':
+					printTorqueStuff();
 					break;
 				case 'h':
-					menu = true;
+					printMenu();
 					break;
 				case 'z':
 					Board_UART_Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+					break;
+				case '1':
+					targetState = 1;
+					break;
+				case '2':
+					targetState = 2;
+					break;
+				case '0':
+					targetState = 0;
+					break;
+				case 'n':
+					targetGear = 0;
+					break;
+				case 'f':
+					targetGear = 1;
+					break;
+				case 'p':
+					targetSpeed = 1000;
+					break;
+				case 'm':
+					targetSpeed = 500;
+					break;
+				case 'l':
+					targetSpeed = 0;
+					targetTorque = 0;
+					break;
+				case 'o':
+					targetTorque = 1000;
+					break;
+				case 'k':
+					targetTorque = 0;
 					break;
 				default:
 					Board_UART_Println("Invalid Command");
