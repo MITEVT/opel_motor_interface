@@ -41,6 +41,11 @@ static uint8_t targetState;
 static uint8_t targetGear;
 static uint16_t targetSpeed;
 static uint16_t targetTorque;
+static uint16_t reqSpeed;
+static uint32_t lastRamp;
+static bool speedset;
+static uint16_t testSpeed;
+static bool reverse;
 
 // -------------------------------------------------------------
 // Helper Functions
@@ -86,7 +91,7 @@ void CAN_error(uint32_t error_info) {
 	can_error_flag = true;
 }
 
-uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
+static uint8_t inline calcChecksum(CCAN_MSG_OBJ_T msg) {
     uint8_t cs;
     uint8_t i;
     cs = msg.mode_id;
@@ -98,32 +103,38 @@ uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
 }
 
 
-void sendOne(void){
+static void inline sendOne(void){
 //	Board_UART_Println("Sending CAN with ID: 0x232");
 	msg_obj1.msgobj = 2;
 	msg_obj1.mode_id = 0x232;
 	msg_obj1.dlc = 8;
-	msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
-	msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
+//	if(targetGear == 2){
+//		msg_obj1.data[0] = ((20000-targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+//		msg_obj1.data[1] = ((20000-targetSpeed) & 0xFF); // Speed Request: LSB
+//	}
+//	else{
+		msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+		msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
+//	}
 	msg_obj1.data[2] = 0x00; // Not Used
 	msg_obj1.data[3] = 0x00; // Not Used
 	msg_obj1.data[4] = 0x00; // Not Used
 	msg_obj1.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
-	msg_obj1.data[6] = heartVal+(targetState<<6)+(targetGear<<4); // alive time, gear, state
+	msg_obj1.data[6] = heartVal|(targetState<<6)|(targetGear<<4); // alive time, gear, state
 	msg_obj1.data[7] = DMOC_Checksum(msg_obj1); // Checksum
 
 	LPC_CCAN_API->can_transmit(&msg_obj1);
 }
 
-void sendTwo(void){
+static void inline sendTwo(void){
 //	Board_UART_Println("Sending CAN with ID: 0x233");
 	msg_obj2.msgobj = 2;
 	msg_obj2.mode_id = 0x233;
 	msg_obj2.dlc = 8;
 	msg_obj2.data[0] = ((0x7530+targetTorque) & 0xFF00)>>8;	// Torque Request
 	msg_obj2.data[1] = ((0x7530+targetTorque) & 0x00FF);	// Torque Request
-	msg_obj2.data[2] = 0x75; // Torque Request
-	msg_obj2.data[3] = 0x30; // Torque Request
+	msg_obj2.data[2] = ((0x7530-targetTorque) & 0xFF00)>>8; // Torque Request
+	msg_obj2.data[3] = ((0x7530-targetTorque) & 0x00FF); // Torque Request
 	msg_obj2.data[4] = 0x75; // Standby Torque: Value 0
 	msg_obj2.data[5] = 0x30; // Standby Torque: Value 0
 	msg_obj2.data[6] = heartVal; // Alive time
@@ -131,12 +142,12 @@ void sendTwo(void){
 	LPC_CCAN_API->can_transmit(&msg_obj2);
 }
 
-void sendThree(void){
+static void inline sendThree(void){
 //	Board_UART_Println("Sending CAN with ID: 0x234");
 	msg_obj3.msgobj = 2;
 	msg_obj3.mode_id = 0x234;
 	msg_obj3.dlc = 8;
-	msg_obj3.data[0] = 0x00;	// Regen Power MSB
+	msg_obj3.data[0] = 0x27;	// Regen Power MSB
 	msg_obj3.data[1] = 0x00;	// Regen Power LSB
 	msg_obj3.data[2] = 0x27; // Accel Power MSB
 	msg_obj3.data[3] = 0x00; // Accel Power LSB
@@ -148,7 +159,7 @@ void sendThree(void){
 }
 
 
-void printMenu(void){
+static void inline printMenu(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("You are in a forest and encounter a strange metal box");
 	Board_UART_Print("You've recieved ");
@@ -159,10 +170,26 @@ void printMenu(void){
 	Board_UART_Println("s) Discuss State of box");
 	Board_UART_Println("t) Inspect Torque Output");
 	Board_UART_Println("h) Examine your surroundings");
+	Board_UART_Println("0) Disable The Box");
+	Board_UART_Println("1) Start the Box");
+	Board_UART_Println("2) Enable the box");
+	Board_UART_Println("n) Put the box in neutral");
+	Board_UART_Println("f) Put the box in forward");
+	Board_UART_Println("o) Raise torque limit");
+	Board_UART_Println("k) Deprive it of torque");
+	Board_UART_Println("m) 500 rmp");
+	Board_UART_Println("p) 1000 rmp");
+	Board_UART_Println("l) Deprive it of speed");
+	Board_UART_Println("---------------------------------------------");
+	Board_UART_Println("Recommended keypresses for demos:");
+	Board_UART_Println("Ensure that the motor controller responds before you proceed in the steps");
+	Board_UART_Println("1  2  f  o  m  p");
+	Board_UART_Println("Disable to the motor by working backwords with:");
+	Board_UART_Println("l  k  n  1  0");
 	Board_UART_Println("---------------------------------------------\n\n");
 }
 
-void printState(void){
+static void inline printState(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Print("STATE: ");
 	if(state.op_stat == POWERUP){
@@ -192,7 +219,7 @@ void printState(void){
 	Board_UART_Println("---------------------------------------------\n\n");
 }
 
-void printHVStuff(void){
+static void inline printHVStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("High Voltage State:");
 	Board_UART_Print("HV Voltage: ");
@@ -202,11 +229,16 @@ void printHVStuff(void){
 	Board_UART_Println("---------------------------------------------");
 }
 
-void printTorqueStuff(void){
+static void inline printTorqueStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("Torque Status: ");
 	Board_UART_PrintNum(torqueStat,10,true);
 	Board_UART_Println("---------------------------------------------\n\n");
+}
+
+static void inline printGear(void){
+	Board_UART_Println("---------------------------------------------");
+	Board_UART_Println("Gear:");
 }
 
 
@@ -223,6 +255,8 @@ int main(void)
 	targetGear = 0;
 	targetSpeed = 0;
 	targetTorque = 0;
+	reqSpeed = 0;
+	reverse = false;
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
 	if (Board_SysTick_Init()) {
@@ -302,9 +336,10 @@ int main(void)
 
 	uint8_t count;
 
-	bool menu=true;
-	bool listen=false;
+
+	speedset = false;
 	messagesRecieved=0;
+	lastRamp = 0;
 	while (1) {
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			CCAN_MSG_OBJ_T temp_msg;
@@ -347,60 +382,102 @@ int main(void)
 			sendThree();
 			heartVal = (heartVal+2) & 0x0F;
 		}
-
+		
+		if(lastRamp < msTicks-2 && targetSpeed<reqSpeed){
+			targetSpeed++;
+			lastRamp = msTicks;
+		}
+		else if(lastRamp < msTicks-2 && targetSpeed>reqSpeed){
+			targetSpeed--;
+			lastRamp = msTicks;
+		}
 		uint8_t count;
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
-			//Board_UART_SendBlocking(uart_rx_buffer, count); // Echo user input
-			switch (uart_rx_buffer[0]) {
-				case 's':
-					printState();
-					break;
-				case 'v':
-					printHVStuff();
-					break;
-				case 't':
-					printTorqueStuff();
-					break;
-				case 'h':
-					printMenu();
-					break;
-				case 'z':
-					Board_UART_Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-					break;
-				case '1':
-					targetState = 1;
-					break;
-				case '2':
-					targetState = 2;
-					break;
-				case '0':
-					targetState = 0;
-					break;
-				case 'n':
-					targetGear = 0;
-					break;
-				case 'f':
-					targetGear = 1;
-					break;
-				case 'p':
-					targetSpeed = 1000;
-					break;
-				case 'm':
-					targetSpeed = 500;
-					break;
-				case 'l':
-					targetSpeed = 0;
-					targetTorque = 0;
-					break;
-				case 'o':
-					targetTorque = 1000;
-					break;
-				case 'k':
-					targetTorque = 0;
-					break;
-				default:
-					Board_UART_Println("Invalid Command");
-					break;
+			if(!speedset){
+				switch (uart_rx_buffer[0]) {
+					case 's':
+						printState();
+						break;
+					case 'v':
+						printHVStuff();
+						break;
+					case 't':
+						printTorqueStuff();
+						break;
+					case 'h':
+						printMenu();
+						break;
+					case 'z':
+						Board_UART_Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+						break;
+					case '1':
+						targetState = 1;
+						break;
+					case '2':
+						targetState = 2;
+						break;
+					case '0':
+						targetState = 0;
+						break;
+					case 'n':
+						targetGear = 0;
+						break;
+					case 'f':
+						targetGear = 1;
+						break;
+					case 'r':
+						targetGear = 2;
+						break;
+					case 'p':
+						reqSpeed = 1000;
+						Board_UART_Println("Setting Speed to 1000 rmp");
+						break;
+					case 'm':
+						reqSpeed = 500;
+						break;
+					case 'l':
+						reqSpeed = 0;
+						targetSpeed = 0;
+						break;
+					case 'o':
+						targetTorque = 1000;
+						break;
+					case 'k':
+						targetTorque = 0;
+						break;
+					case 'b':
+						Board_UART_Println("Set a target speed in rpm:");
+						speedset = true;
+						testSpeed = 0;
+						break;
+					default:
+						Board_UART_Println("Invalid Command");
+						break;
+				}
+			}
+			else{
+				char tmp = uart_rx_buffer[0];
+				Board_UART_SendBlocking(&tmp, 1);
+				if (tmp>47 && tmp<58){
+						testSpeed = (testSpeed * 10)+(tmp-48);
+				}
+				else if(uart_rx_buffer[0] == '\n'){
+					Board_UART_Println("");
+					if(testSpeed < 2500){
+						Board_UART_Print("Setting Speed in rpm to: ");
+						Board_UART_PrintNum(testSpeed,10,true);
+						reqSpeed = testSpeed;
+					}
+					else{
+						Board_UART_Println("Speed out of bounds");
+					}
+					Board_UART_Println("---------------------------------------\n");
+					speedset = false;
+				}
+				else{
+					Board_UART_Println("Invalid speed");
+					speedset = false;
+				}
 			}
 		}
 	}
