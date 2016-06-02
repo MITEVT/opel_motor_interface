@@ -5,7 +5,7 @@
 // Macro Definitions
 
 #define CCAN_BAUD_RATE 500000 					// Desired CAN Baud Rate
-#define UART_BAUD_RATE 57600 					// Desired UART Baud Rate
+#define UART_BAUD_RATE 19200 					// Desired UART Baud Rate
 
 #define BUFFER_SIZE 8
 
@@ -241,6 +241,17 @@ static void inline printGear(void){
 	Board_UART_Println("Gear:");
 }
 
+static void inline enableDMOC(void){
+	Board_UART_Println("Enabling DMOC");
+	while((LPC_USART->LSR & 0x40)==0);
+//	_delay(2);
+	Board_DMOC_Comm_Enable();
+	Board_UART_Println("ab");
+	while((LPC_USART->LSR & 0x40)==0);
+//	_delay(2);
+	Board_DMOC_Comm_Disable();
+}
+
 
 // -------------------------------------------------------------
 // Interrupt Service Routines
@@ -268,7 +279,8 @@ int main(void)
 	// Initialize GPIO and LED as output
 	Board_LEDs_Init();
 	Board_LED_On(LED0);
-
+	Board_DMOC_Comm_Init();
+	Board_DMOC_Comm_Disable();
 	//---------------
 	// Initialize UART Communication
 	Board_UART_Init(UART_BAUD_RATE);
@@ -449,6 +461,9 @@ int main(void)
 						Board_UART_Println("Set a target speed in rpm:");
 						speedset = true;
 						testSpeed = 0;
+						break;
+					case 'g':
+						enableDMOC();
 						break;
 					default:
 						Board_UART_Println("Invalid Command");

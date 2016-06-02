@@ -128,3 +128,15 @@ void Board_CAN_Init(uint32_t baudrate, void (*rx_callback)(uint8_t), void (*tx_c
 	/* Enable the CAN Interrupt */
 	NVIC_EnableIRQ(CAN_IRQn);
 }
+
+void Board_DMOC_Comm_Enable(void){
+	Chip_GPIO_SetPinState(LPC_GPIO,DMOC_COM_PIN,false);
+}
+
+void Board_DMOC_Comm_Init(void){
+	Chip_GPIO_WriteDirBit(LPC_GPIO,DMOC_COM_PIN,true);
+}
+
+void Board_DMOC_Comm_Disable(void){
+	Chip_GPIO_SetPinState(LPC_GPIO,DMOC_COM_PIN,true);
+}

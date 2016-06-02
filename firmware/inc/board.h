@@ -32,6 +32,8 @@ volatile uint32_t msTicks; 						/** @brief System Time (ms) **/
 #define UART_TX_PIN 7
 #define UART_TX_IOCON IOCON_PIO1_7
 
+#define DMOC_COM_PIN 2,4
+
 // -------------------------------------------------------------
 // Computed Macros
 
@@ -108,6 +110,10 @@ void Board_UART_SendBlocking(const void *data, uint8_t num_bytes);
 int8_t Board_UART_Read(void *data, uint8_t num_bytes);
 
 void Board_CAN_Init(uint32_t baudrate, void (*rx_callback)(uint8_t), void (*tx_callback)(uint8_t), void (*error_callback)(uint32_t));
+
+void Board_DMOC_Comm_Enable(void);
+void Board_DMOC_Comm_Disable(void);
+void Board_DMOC_Comm_Init(void);
 
 
 #endif
