@@ -109,10 +109,29 @@ void Board_UART_SendBlocking(const void *data, uint8_t num_bytes);
  */
 int8_t Board_UART_Read(void *data, uint8_t num_bytes);
 
+
 void Board_CAN_Init(uint32_t baudrate, void (*rx_callback)(uint8_t), void (*tx_callback)(uint8_t), void (*error_callback)(uint32_t));
 
+/**
+ * Enable the RS-232 communcation with the motor controller
+ *
+ * @return	Nothing
+ */
 void Board_DMOC_Comm_Enable(void);
+
+/**
+ * Disable the RS-232 communication with the motor controller
+ *
+ * @return	Nothing
+ */
 void Board_DMOC_Comm_Disable(void);
+
+/**
+ * Initialize the RS-232 communication with the motor controller
+ *
+ * @return	Nothing
+ * @note	Requires that GPIO has been initialized first
+ */
 void Board_DMOC_Comm_Init(void);
 
 

@@ -22,8 +22,6 @@ static CCAN_MSG_OBJ_T msg_obj1; 					// Message Object data structure for manipu
 static CCAN_MSG_OBJ_T msg_obj2; 					// Message Object data structure for manipulating CAN messages
 static CCAN_MSG_OBJ_T msg_obj3; 					// Message Object data structure for manipulating CAN messages
 
-static CCAN_MSG_OBJ_T msg_obj4; 					// Message Object data structure for manipulating CAN messages
-
 static char str[100];							// Used for composing UART messages
 static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
 
@@ -97,7 +95,7 @@ void CAN_error(uint32_t error_info) {
  *	checksum for the message
  *
  *	@return: The checksum */
-static uint8_t inline calcChecksum(CCAN_MSG_OBJ_T msg) {
+inline static uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
     uint8_t cs;
     uint8_t i;
     cs = msg.mode_id;
@@ -129,7 +127,7 @@ static uint8_t inline calcChecksum(CCAN_MSG_OBJ_T msg) {
  * 	@return: Nothing
  */
 
-static void inline sendOne(void){
+inline static void sendOne(void){
 	msg_obj1.msgobj = 2;
 	msg_obj1.mode_id = 0x232;
 	msg_obj1.dlc = 8;
@@ -166,7 +164,7 @@ static void inline sendOne(void){
  *
  *	@return: Nothing
  */	
-static void inline sendTwo(void){
+inline static void sendTwo(void){
 	msg_obj2.msgobj = 2;
 	msg_obj2.mode_id = 0x233;
 	msg_obj2.dlc = 8;
@@ -199,7 +197,7 @@ static void inline sendTwo(void){
  *
  *	@return: Nothing
  */
-static void inline sendThree(void){
+inline static void sendThree(void){
 	msg_obj3.msgobj = 2;
 	msg_obj3.mode_id = 0x234;
 	msg_obj3.dlc = 8;
@@ -216,7 +214,7 @@ static void inline sendThree(void){
 
 
 /* Prints a help menu to allow people to more easily interact with the program */
-static void inline printMenu(void){
+inline static void printMenu(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("You are in a forest and encounter a strange metal box");
 	Board_UART_Print("You've recieved ");
@@ -247,7 +245,7 @@ static void inline printMenu(void){
 }
 
 /* Prints the current state of the motor controller */
-static void inline printState(void){
+inline static void printState(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Print("STATE: ");
 	if(state.op_stat == POWERUP){
@@ -279,7 +277,7 @@ static void inline printState(void){
 
 
 /* Prints the high voltage information known about the motor controller */
-static void inline printHVStuff(void){
+inline static void printHVStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("High Voltage State:");
 	Board_UART_Print("HV Voltage: ");
@@ -291,7 +289,7 @@ static void inline printHVStuff(void){
 
 
 /* Prints the current torque status of the motor controller */
-static void inline printTorqueStuff(void){
+inline static void printTorqueStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("Torque Status: ");
 	Board_UART_PrintNum(torqueStat,10,true);
@@ -299,7 +297,7 @@ static void inline printTorqueStuff(void){
 }
 
 /* Enables the motor controller by sending the RS-232 message "ab" */
-static void inline enableDMOC(void){
+inline static void enableDMOC(void){
 	Board_UART_Println("Enabling DMOC");
 	while((LPC_USART->LSR & 0x40)==0);
 	Board_DMOC_Comm_Enable();
@@ -390,8 +388,6 @@ int main(void)
 			itoa(can_error_info, str, 2);
 			Board_UART_Println(str);
 
-
-
 			Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);
 			msg_obj.msgobj = 1;
 			msg_obj.mode_id = 0x000;
@@ -417,7 +413,6 @@ int main(void)
 			targetSpeed--;
 			lastRamp = msTicks;
 		}
-		uint8_t count;
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
 			if(!speedset){
 				switch (uart_rx_buffer[0]) {
