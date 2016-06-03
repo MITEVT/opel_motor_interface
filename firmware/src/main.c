@@ -32,20 +32,19 @@ static uint32_t can_error_info;
 
 static uint8_t heartVal = 0;
 
-static DMOC_OP_STATE_T state;
-static DMOC_HV_STAT_T hvstat;
-static uint16_t torqueStat;
-static uint32_t messagesRecieved;
+static DMOC_OP_STATE_T state;			// Keeps track of the state of the motor controller, including mode and speed 
+static DMOC_HV_STAT_T hvstat;			// Keeps track of the high voltage state of the motor controller
+static uint16_t torqueStat;				// Keeps track of the torque state
+static uint32_t messagesRecieved;		// Tracks the number of messages received for debugging. Remove before final build
 
-static uint8_t targetState;
-static uint8_t targetGear;
-static uint16_t targetSpeed;
-static uint16_t targetTorque;
-static uint16_t reqSpeed;
-static uint32_t lastRamp;
-static bool speedset;
-static uint16_t testSpeed;
-static bool reverse;
+static uint8_t targetState;				// The state that we are telling the motor controller to become
+static uint8_t targetGear;				// The "gear" (forward, reverse, neutral) that we are telling the motor controller to become
+static uint16_t targetSpeed;			// The current speed request sent to the motor controller in the speed ramp
+static uint16_t targetTorque;			// The torque that we would like to motor controller to apply to the motor (can act as bounds)
+static uint16_t reqSpeed;				// The speed that we would like the motor controller to spin the motor
+static uint32_t lastRamp;				// The last time the speed was increased, used to make a more gentle ramp with speed changes
+static bool speedset;					// If the speed is currently being set, and the chip should look for numerical inputs
+static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds 
 
 // -------------------------------------------------------------
 // Helper Functions
@@ -66,7 +65,6 @@ void _delay(uint32_t ms) {
 /*	Function is executed by the Callback handler after
     a CAN message has been received */
 void CAN_rx(uint8_t msg_obj_num) {
-	// LED_On();
 	/* Determine which CAN message has been received */
 	msg_obj.msgobj = msg_obj_num;
 	/* Now load up the msg_obj structure with the CAN message */
@@ -91,6 +89,14 @@ void CAN_error(uint32_t error_info) {
 	can_error_flag = true;
 }
 
+// -------------------------------------------------------------
+// DMOC required messages
+
+/* 	Checksum calculations */
+/*	Function takes a CAN message, and calculates the required
+ *	checksum for the message
+ *
+ *	@return: The checksum */
 static uint8_t inline calcChecksum(CCAN_MSG_OBJ_T msg) {
     uint8_t cs;
     uint8_t i;
@@ -102,20 +108,33 @@ static uint8_t inline calcChecksum(CCAN_MSG_OBJ_T msg) {
     return cs;
 }
 
+/*	First Required Message - States */
+/* 	Function sends the first of the required CAN messages
+ *
+ *  The first one sends state information and a speed request.
+ *  
+ *  The first two bytes are the target speed, which is calculated by offsettng it by 20000
+ *  
+ *  Then there are three supposedly unused bytes
+ *  
+ *  The next byte determines the "key mode" of the car, if it is on or off
+ *
+ *  Next, There is a byte that contains lots of information. It gives a heartbeat val
+ *  that is calculated based upon the number of messages previously sent. Next, it 
+ *  also contains the target state and gear of the the vehicle. Telling the motor
+ *  controller that it should be in enabled and moving forward, by example. 
+ *
+ * 	Finally, the last byte is the checksum
+ *
+ * 	@return: Nothing
+ */
 
 static void inline sendOne(void){
-//	Board_UART_Println("Sending CAN with ID: 0x232");
 	msg_obj1.msgobj = 2;
 	msg_obj1.mode_id = 0x232;
 	msg_obj1.dlc = 8;
-//	if(targetGear == 2){
-//		msg_obj1.data[0] = ((20000-targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
-//		msg_obj1.data[1] = ((20000-targetSpeed) & 0xFF); // Speed Request: LSB
-//	}
-//	else{
-		msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
-		msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
-//	}
+	msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+	msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
 	msg_obj1.data[2] = 0x00; // Not Used
 	msg_obj1.data[3] = 0x00; // Not Used
 	msg_obj1.data[4] = 0x00; // Not Used
@@ -126,8 +145,28 @@ static void inline sendOne(void){
 	LPC_CCAN_API->can_transmit(&msg_obj1);
 }
 
+/* 	Second Required Message - Torques */
+/*	Function sends the second of the required CAN messages
+ *
+ * 	The second one sends torque information.
+ *
+ *	The first two bytes transmit the torque upper limit.
+ *
+ *	The next two bytes transmit the torque lower limit.
+ *
+ *	If the upper and lower limits are the same, then the motor controller
+ *	is being used in torque mode, rather than speed mode
+ *
+ *	Next are the "standby torque" values, which, because the documentation
+ *	that I looked at didn't have a good explaination, I am leaving at a 
+ *	value of zero for now.
+ *
+ *	Finally, the last two bytes contains the same heartbeat value as the other messages
+ *	and the checksum for the overall message
+ *
+ *	@return: Nothing
+ */	
 static void inline sendTwo(void){
-//	Board_UART_Println("Sending CAN with ID: 0x233");
 	msg_obj2.msgobj = 2;
 	msg_obj2.mode_id = 0x233;
 	msg_obj2.dlc = 8;
@@ -142,8 +181,25 @@ static void inline sendTwo(void){
 	LPC_CCAN_API->can_transmit(&msg_obj2);
 }
 
+/*	Third required Message - Power */
+
+/*	Function sends the third and final required CAN message
+ *	It contains information on the power
+ *	
+ *	The first two bytes are the power allowed for Regen
+ *
+ *	The next two bytes are the power allowed for acceleration
+ *
+ * 	After that, it becomes a bit confusing. The resources that I
+ * 	looked at were a little bit unclear on two of the bytes.
+ *
+ * 	There is then the same heartbeat values.
+ *	
+ *	The last byte is the checksum
+ *
+ *	@return: Nothing
+ */
 static void inline sendThree(void){
-//	Board_UART_Println("Sending CAN with ID: 0x234");
 	msg_obj3.msgobj = 2;
 	msg_obj3.mode_id = 0x234;
 	msg_obj3.dlc = 8;
@@ -159,6 +215,7 @@ static void inline sendThree(void){
 }
 
 
+/* Prints a help menu to allow people to more easily interact with the program */
 static void inline printMenu(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("You are in a forest and encounter a strange metal box");
@@ -189,6 +246,7 @@ static void inline printMenu(void){
 	Board_UART_Println("---------------------------------------------\n\n");
 }
 
+/* Prints the current state of the motor controller */
 static void inline printState(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Print("STATE: ");
@@ -219,6 +277,8 @@ static void inline printState(void){
 	Board_UART_Println("---------------------------------------------\n\n");
 }
 
+
+/* Prints the high voltage information known about the motor controller */
 static void inline printHVStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("High Voltage State:");
@@ -229,6 +289,8 @@ static void inline printHVStuff(void){
 	Board_UART_Println("---------------------------------------------");
 }
 
+
+/* Prints the current torque status of the motor controller */
 static void inline printTorqueStuff(void){
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("Torque Status: ");
@@ -236,19 +298,13 @@ static void inline printTorqueStuff(void){
 	Board_UART_Println("---------------------------------------------\n\n");
 }
 
-static void inline printGear(void){
-	Board_UART_Println("---------------------------------------------");
-	Board_UART_Println("Gear:");
-}
-
+/* Enables the motor controller by sending the RS-232 message "ab" */
 static void inline enableDMOC(void){
 	Board_UART_Println("Enabling DMOC");
 	while((LPC_USART->LSR & 0x40)==0);
-//	_delay(2);
 	Board_DMOC_Comm_Enable();
 	Board_UART_Println("ab");
 	while((LPC_USART->LSR & 0x40)==0);
-//	_delay(2);
 	Board_DMOC_Comm_Disable();
 }
 
@@ -267,7 +323,7 @@ int main(void)
 	targetSpeed = 0;
 	targetTorque = 0;
 	reqSpeed = 0;
-	reverse = false;
+
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
 	if (Board_SysTick_Init()) {
@@ -292,57 +348,15 @@ int main(void)
 	RingBuffer_Init(&can_rx_buffer, _rx_buffer, sizeof(CCAN_MSG_OBJ_T), BUFFER_SIZE);
 	RingBuffer_Flush(&can_rx_buffer);
 
-	Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);
-
-	// For your convenience.
-	// typedef struct CCAN_MSG_OBJ {
-	// 	uint32_t  mode_id;
-	// 	uint32_t  mask;
-	// 	uint8_t   data[8];
-	// 	uint8_t   dlc;
-	// 	uint8_t   msgobj;
-	// } CCAN_MSG_OBJ_T;
-
-	/* [Tutorial] How do filters work?
-
-		Incoming ID & Mask == Mode_ID for msgobj to accept message
-
-		Incoming ID : 0xabc
-		Mask: 		  0xF0F &
-		            -----------
-		              0xa0c
-
-		mode_id == 0xa0c for msgobj to accept message
-
-	*/
-
+	Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);	
 	msg_obj.msgobj = 1;
 	msg_obj.mode_id = 0x000;
 	msg_obj.mask = 0x000;
 	LPC_CCAN_API->config_rxmsgobj(&msg_obj);
 
-	/* [Tutorial] How do I send a CAN Message?
-
-		There are 32 Message Objects in the CAN Peripherals Message RAM.
-		We need to pick one that isn't setup for receiving messages and use it to send.
-
-		For this exmaple we'll pick 31
-
-		msg_obj.msgobj = 31;
-		msg_obj.mode_id = 0x600; 		// CAN ID of Message to Send
-		msg_obj.dlc = 8; 				// Byte length of CAN Message
-		msg_obj.data[0] = 0xAA; 		// Fill your bytes here
-		msg_obj.data[1] = ..;
-		..
-		msg_obj.data[7] = 0xBB:
-
-		Now its time to send
-		LPC_CCAN_API->can_transmit(&msg_obj);
-
-	*/
-
 	can_error_flag = false;
 	can_error_info = 0;
+
 
 	uint32_t lasttime = msTicks;
 
