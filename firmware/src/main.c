@@ -18,9 +18,11 @@ static CCAN_MSG_OBJ_T msg_obj; 					// Message Object data structure for manipul
 static RINGBUFF_T can_rx_buffer;				// Ring Buffer for storing received CAN messages
 static CCAN_MSG_OBJ_T _rx_buffer[BUFFER_SIZE]; 	// Underlying array used in ring buffer
 
-static CCAN_MSG_OBJ_T msg_obj1; 					// Message Object data structure for manipulating CAN messages
-static CCAN_MSG_OBJ_T msg_obj2; 					// Message Object data structure for manipulating CAN messages
-static CCAN_MSG_OBJ_T msg_obj3; 					// Message Object data structure for manipulating CAN messages
+//-----------------------------------
+// Not sure why these seem to need to be on totally seperate message objects, but it wouldn't work otherwise
+static CCAN_MSG_OBJ_T msg_obj1;
+static CCAN_MSG_OBJ_T msg_obj2;
+static CCAN_MSG_OBJ_T msg_obj3;
 
 static char str[100];							// Used for composing UART messages
 static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
@@ -43,6 +45,9 @@ static uint16_t reqSpeed;				// The speed that we would like the motor controlle
 static uint32_t lastRamp;				// The last time the speed was increased, used to make a more gentle ramp with speed changes
 static bool speedset;					// If the speed is currently being set, and the chip should look for numerical inputs
 static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds 
+
+static uint8_t count;					// The amount of data in the UART buffer
+uint32_t lasttime;						// Stores the last time that the required CAN messages were sent
 
 // -------------------------------------------------------------
 // Helper Functions
@@ -126,6 +131,8 @@ inline static uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
  *
  * 	@return: Nothing
  */
+
+
 
 inline static void sendOne(void){
 	msg_obj1.msgobj = 2;
@@ -232,13 +239,12 @@ inline static void printMenu(void){
 	Board_UART_Println("f) Put the box in forward");
 	Board_UART_Println("o) Raise torque limit");
 	Board_UART_Println("k) Deprive it of torque");
-	Board_UART_Println("m) 500 rmp");
 	Board_UART_Println("p) 1000 rmp");
 	Board_UART_Println("l) Deprive it of speed");
 	Board_UART_Println("---------------------------------------------");
 	Board_UART_Println("Recommended keypresses for demos:");
 	Board_UART_Println("Ensure that the motor controller responds before you proceed in the steps");
-	Board_UART_Println("1  2  f  o  m  p");
+	Board_UART_Println("g  1  2  f  o  p");
 	Board_UART_Println("Disable to the motor by working backwords with:");
 	Board_UART_Println("l  k  n  1  0");
 	Board_UART_Println("---------------------------------------------\n\n");
@@ -256,6 +262,9 @@ inline static void printState(void){
 	}
 	else if (state.op_stat == ENABLED){
 		Board_UART_Println("ENABLED");
+	}
+	else if (state.op_stat == STANDBY){
+		Board_UART_Println("STANDBY");
 	}
 	else if (state.op_stat == POWERDOWN){
 		Board_UART_Println("POWERDOWN");
@@ -306,21 +315,22 @@ inline static void enableDMOC(void){
 	Board_DMOC_Comm_Disable();
 }
 
-
-// -------------------------------------------------------------
-// Interrupt Service Routines
-
-
 // -------------------------------------------------------------
 // Main Program Loop
 
 int main(void)
 {
+
+	//------------
+	// Set many variables to their initial values of 0
 	targetState = 0;
 	targetGear = 0;
 	targetSpeed = 0;
 	targetTorque = 0;
 	reqSpeed = 0;
+	speedset = false;
+	messagesRecieved=0;
+	lastRamp = 0;
 
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
@@ -355,33 +365,36 @@ int main(void)
 	can_error_flag = false;
 	can_error_info = 0;
 
+	// Store the time for the periodic sending of the required CAN messages
+	lasttime = msTicks;
 
-	uint32_t lasttime = msTicks;
-
-	uint8_t count;
-
-
-	speedset = false;
-	messagesRecieved=0;
-	lastRamp = 0;
+	// Forever
 	while (1) {
+
+		//-----------------------------------------
+		// Process the new CAN messages
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			CCAN_MSG_OBJ_T temp_msg;
 			RingBuffer_Pop(&can_rx_buffer, &temp_msg);
+			//	Increment the count of the messages
 			messagesRecieved++;
-				if (temp_msg.mode_id == DMOC_STATE_ID)
-					DMOC_Decode_State(&temp_msg,&state);
 
-				else if(temp_msg.mode_id == DMOC_HV_STAT_ID){
-					DMOC_Decode_HV_Status(&temp_msg, &hvstat);
-				}
-				else if (temp_msg.mode_id == DMOC_TORQUE_STAT_ID){
-					torqueStat = DMOC_Decode_Torque_Status(&temp_msg);
+			//	If it's a state message, decode the state data
+			if (temp_msg.mode_id == DMOC_STATE_ID)
+				DMOC_Decode_State(&temp_msg,&state);
+			
+			// If it's a High Voltage message, decode it
+			else if(temp_msg.mode_id == DMOC_HV_STAT_ID)
+				DMOC_Decode_HV_Status(&temp_msg, &hvstat);
 
-			}
-
+			// If it's a torque message, decode it
+			else if (temp_msg.mode_id == DMOC_TORQUE_STAT_ID)
+				torqueStat = DMOC_Decode_Torque_Status(&temp_msg);
 		}
 
+
+		//---------------------------------------------------
+		// Process CAN Errors - Print over UART
 		if (can_error_flag) {
 			can_error_flag = false;
 			Board_UART_Print("CAN Error: 0b");
@@ -395,6 +408,8 @@ int main(void)
 			LPC_CCAN_API->config_rxmsgobj(&msg_obj);
 		}
 
+		//--------------------------------------------
+		// Every .25 seconds, transmit the required CAN messages
 		if(lasttime < msTicks-250){
 			lasttime = msTicks;
 			sendOne();
@@ -405,6 +420,9 @@ int main(void)
 			heartVal = (heartVal+2) & 0x0F;
 		}
 		
+		//-------------------------------------------
+		// Ramps the speed progressivly up or down. Every 2 
+		// milliseconds, change the speed by 1 rpm
 		if(lastRamp < msTicks-2 && targetSpeed<reqSpeed){
 			targetSpeed++;
 			lastRamp = msTicks;
@@ -413,6 +431,10 @@ int main(void)
 			targetSpeed--;
 			lastRamp = msTicks;
 		}
+
+		//-------------------------------------------
+		// Process UART Input from the user
+		//
 		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
 			if(!speedset){
 				switch (uart_rx_buffer[0]) {
@@ -453,9 +475,6 @@ int main(void)
 						reqSpeed = 1000;
 						Board_UART_Println("Setting Speed to 1000 rmp");
 						break;
-					case 'm':
-						reqSpeed = 500;
-						break;
 					case 'l':
 						reqSpeed = 0;
 						targetSpeed = 0;
@@ -479,6 +498,8 @@ int main(void)
 						break;
 				}
 			}
+			//--------------------------------------------
+			// Prepare for a numerical speed input
 			else{
 				char tmp = uart_rx_buffer[0];
 				Board_UART_SendBlocking(&tmp, 1);
