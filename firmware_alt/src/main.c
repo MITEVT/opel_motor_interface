@@ -34,7 +34,7 @@ static uint8_t heartVal = 0;
 
 static DMOC_OP_STATE_T state;			// Keeps track of the state of the motor controller, including mode and speed 
 static DMOC_HV_STAT_T hvstat;			// Keeps track of the high voltage state of the motor controller
-static uint16_t torqueStat;				// Keeps track of the torque state
+static int32_t torqueStat;				// Keeps track of the torque state
 static uint32_t messagesRecieved;		// Tracks the number of messages received for debugging. Remove before final build
 
 static uint8_t targetState;				// The state that we are telling the motor controller to become
@@ -275,6 +275,9 @@ inline static void printState(void){
 	else if (state.op_stat == CRITICAL_FAULT){
 		Board_UART_Println("Critical Fault");
 	}
+	else if (state.op_stat == 0xF){
+		Board_UART_Println("OFF");
+	}
 	else{
 		Board_UART_Print("0x");
 		Board_UART_PrintNum(state.op_stat,16,true);
@@ -288,7 +291,7 @@ inline static void printState(void){
 /* Prints the high voltage information known about the motor controller */
 inline static void printHVStuff(void){
 //	Board_UART_Println("---------------------------------------------");
-	Board_UART_Println("High Voltage State:");
+//	Board_UART_Println("High Voltage State:");
 	Board_UART_Print("HV Voltage: ");
 	Board_UART_PrintNum(hvstat.hv_voltage, 10, true);
 	Board_UART_Print("HV Current: ");
@@ -300,7 +303,7 @@ inline static void printHVStuff(void){
 /* Prints the current torque status of the motor controller */
 inline static void printTorqueStuff(void){
 //	Board_UART_Println("---------------------------------------------");
-	Board_UART_Println("Torque Status: ");
+	Board_UART_Print("Torque Status: ");
 	Board_UART_PrintNum(torqueStat,10,true);
 //	Board_UART_Println("---------------------------------------------\n\n");
 }
@@ -337,6 +340,11 @@ int main(void)
 	speedset = false;
 	messagesRecieved=0;
 	lastRamp = 0;
+	torqueStat = 0;
+	hvstat.hv_voltage = 0;
+	hvstat.hv_current = 0;
+	state.op_stat=0xF;
+	state.speed=0;
 
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
