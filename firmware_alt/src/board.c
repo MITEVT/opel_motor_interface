@@ -142,14 +142,59 @@ void Board_DMOC_Comm_Disable(void){
 }
 
 void Board_DCDC_Init(void){
-	// Chip_GPIO_WriteDirBit(LPC_GPIO,DCDC_CON_PIN,true);
+	Chip_GPIO_WriteDirBit(LPC_GPIO,DCDC_CON_PIN,true);
 }
 
 void Board_DCDC_Enable(void){
-	// Chip_GPIO_SetPinState(LPC_GPIO,DCDC_CON_PIN,true);
-	
+	Chip_GPIO_SetPinState(LPC_GPIO,DCDC_CON_PIN,true);
+
 }
 
 void Board_DCDC_Disable(void){
-	// Chip_GPIO_SetPinState(LPC_GPIO,DCDC_CON_PIN,false);
+	Chip_GPIO_SetPinState(LPC_GPIO,DCDC_CON_PIN,false);
+}
+
+static void Init_SSP_PinMux(void){
+	Chip_IOCON_PinMuxSet(LPC_IOCON, IOCON_PIO0_8, (IOCON_FUNC1 | IOCON_MODE_INACT));
+	Chip_IOCON_PinMuxSet(LPC_IOCON, IOCON_PIO0_9, (IOCON_FUNC1 | IOCON_MODE_INACT));
+	Chip_IOCON_PinMuxSet(LPC_IOCON, IOCON_PIO2_11, (IOCON_FUNC1 | IOCON_MODE_INACT));
+	Chip_IOCON_PinLocSel(LPC_IOCON,	IOCON_SCKLOC_PIO2_11);
+}
+
+void Board_MCP2515_Init(void){
+	SSP_ConfigFormat ssp_format;
+	Init_SSP_PinMux();
+	Chip_SSP_Init(LPC_SSP0);
+	Chip_SSP_SetBitRate(LPC_SSP0, 9600);
+
+	ssp_format.frameFormat = SSP_FRAMEFORMAT_SPI;
+	ssp_format.bits = SSP_BITS_8;
+	ssp_format.clockMode = SSP_CLOCK_MODE0;
+	Chip_SSP_SetFormat(LPC_SSP0, ssp_format.bits, ssp_format.frameFormat, ssp_format.clockMode);
+	Chip_SSP_SetMaster(LPC_SSP0, true);
+	Chip_SSP_Enable(LPC_SSP0);
+
+	Chip_Clock_SetCLKOUTSource(SYSCTL_CLKOUTSRC_MAINSYSCLK, CLKOUT_DIV);
+	Chip_IOCON_PinMuxSet(LPC_IOCON, IOCON_PIO0_1, (IOCON_FUNC1 | IOCON_MODE_INACT));	/* CLKOUT */
+
+	MCP2515_Init(MCP_CS_PIN, MCP_INT_PIN);
+	MCP2515_SetBitRate(500, 12, 1);
+
+	MCP2515_BitModify(RXB0CTRL, RXM_MASK, RXM_OFF);
+	MCP2515_BitModify(CANCTRL, MODE_MASK | CLKEN_MASK | CLKPRE_MASK, MODE_NORMAL | CLKEN_ENABLE | CLKPRE_CLKDIV_1);
+}
+
+void Board_MCP2515_Enable_Interrupt(void){
+	Chip_GPIO_SetupPinInt(LPC_GPIO,0,11,GPIO_INT_FALLING_EDGE);
+	Chip_GPIO_EnableInt(LPC_GPIO,0,1<<11);
+	NVIC_EnableIRQ(EINT0_IRQn);
+}
+
+void Board_MCP2515_ClearInterrupt(void){
+	Chip_GPIO_ClearInts(LPC_GPIO,0,1<<11);
+}
+
+void Board_MCP2515_Transmit(CCAN_MSG_OBJ_T *msg_obj){
+	MCP2515_LoadBuffer(0,&msg_obj);
+	MCP2515_SendBuffer(0);
 }

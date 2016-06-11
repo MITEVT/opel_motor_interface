@@ -17,12 +17,15 @@ extern volatile uint32_t msTicks;
 static CCAN_MSG_OBJ_T msg_obj; 					// Message Object data structure for manipulating CAN messages
 static RINGBUFF_T can_rx_buffer;				// Ring Buffer for storing received CAN messages
 static CCAN_MSG_OBJ_T _rx_buffer[BUFFER_SIZE]; 	// Underlying array used in ring buffer
+static CCAN_MSG_OBJ_T temp_msg;
+
 
 //-----------------------------------
 // Not sure why these seem to need to be on totally seperate message objects, but it wouldn't work otherwise
 static CCAN_MSG_OBJ_T msg_obj1;
 static CCAN_MSG_OBJ_T msg_obj2;
 static CCAN_MSG_OBJ_T msg_obj3;
+
 
 static char str[100];							// Used for composing UART messages
 static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
@@ -32,7 +35,7 @@ static uint32_t can_error_info;
 
 static uint8_t heartVal = 0;
 
-static DMOC_OP_STATE_T state;			// Keeps track of the state of the motor controller, including mode and speed 
+static DMOC_OP_STATE_T state;			// Keeps track of the state of the motor controller, including mode and speed
 static DMOC_HV_STAT_T hvstat;			// Keeps track of the high voltage state of the motor controller
 static int32_t torqueStat;				// Keeps track of the torque state
 static uint32_t messagesRecieved;		// Tracks the number of messages received for debugging. Remove before final build
@@ -44,11 +47,12 @@ static uint16_t targetTorque;			// The torque that we would like to motor contro
 static uint16_t reqSpeed;				// The speed that we would like the motor controller to spin the motor
 static uint32_t lastRamp;				// The last time the speed was increased, used to make a more gentle ramp with speed changes
 static bool speedset;					// If the speed is currently being set, and the chip should look for numerical inputs
-static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds 
+static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds
 
 static uint8_t count;					// The amount of data in the UART buffer
 uint32_t lasttime;						// Stores the last time that the required CAN messages were sent
-
+static bool readTime;					// Interrupt flag for needing to read a new CAN message
+uint8_t sendCount;
 // -------------------------------------------------------------
 // Helper Functions
 
@@ -115,17 +119,17 @@ inline static uint8_t calcChecksum(CCAN_MSG_OBJ_T msg) {
 /* 	Function sends the first of the required CAN messages
  *
  *  The first one sends state information and a speed request.
- *  
+ *
  *  The first two bytes are the target speed, which is calculated by offsettng it by 20000
- *  
+ *
  *  Then there are three supposedly unused bytes
- *  
+ *
  *  The next byte determines the "key mode" of the car, if it is on or off
  *
  *  Next, There is a byte that contains lots of information. It gives a heartbeat val
- *  that is calculated based upon the number of messages previously sent. Next, it 
+ *  that is calculated based upon the number of messages previously sent. Next, it
  *  also contains the target state and gear of the the vehicle. Telling the motor
- *  controller that it should be in enabled and moving forward, by example. 
+ *  controller that it should be in enabled and moving forward, by example.
  *
  * 	Finally, the last byte is the checksum
  *
@@ -146,8 +150,7 @@ inline static void sendOne(void){
 	msg_obj1.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
 	msg_obj1.data[6] = heartVal|(targetState<<6)|(targetGear<<4); // alive time, gear, state
 	msg_obj1.data[7] = DMOC_Checksum(msg_obj1); // Checksum
-
-	LPC_CCAN_API->can_transmit(&msg_obj1);
+	Board_MCP2515_Transmit(&msg_obj1);
 }
 
 /* 	Second Required Message - Torques */
@@ -163,14 +166,14 @@ inline static void sendOne(void){
  *	is being used in torque mode, rather than speed mode
  *
  *	Next are the "standby torque" values, which, because the documentation
- *	that I looked at didn't have a good explaination, I am leaving at a 
+ *	that I looked at didn't have a good explaination, I am leaving at a
  *	value of zero for now.
  *
  *	Finally, the last two bytes contains the same heartbeat value as the other messages
  *	and the checksum for the overall message
  *
  *	@return: Nothing
- */	
+ */
 inline static void sendTwo(void){
 	msg_obj2.msgobj = 2;
 	msg_obj2.mode_id = 0x233;
@@ -183,14 +186,14 @@ inline static void sendTwo(void){
 	msg_obj2.data[5] = 0x30; // Standby Torque: Value 0
 	msg_obj2.data[6] = heartVal; // Alive time
 	msg_obj2.data[7] = DMOC_Checksum(msg_obj2); // Checksum
-	LPC_CCAN_API->can_transmit(&msg_obj2);
+	Board_MCP2515_Transmit(&msg_obj2);
 }
 
 /*	Third required Message - Power */
 
 /*	Function sends the third and final required CAN message
  *	It contains information on the power
- *	
+ *
  *	The first two bytes are the power allowed for Regen
  *
  *	The next two bytes are the power allowed for acceleration
@@ -199,7 +202,7 @@ inline static void sendTwo(void){
  * 	looked at were a little bit unclear on two of the bytes.
  *
  * 	There is then the same heartbeat values.
- *	
+ *
  *	The last byte is the checksum
  *
  *	@return: Nothing
@@ -216,7 +219,8 @@ inline static void sendThree(void){
 	msg_obj3.data[5] = 0x60; // Something relating to temperature? Not much info
 	msg_obj3.data[6] = heartVal; // Alive time
 	msg_obj3.data[7] = DMOC_Checksum(msg_obj3); // Checksum
-	LPC_CCAN_API->can_transmit(&msg_obj3);
+
+	Board_MCP2515_Transmit(&msg_obj3);
 }
 
 
@@ -325,6 +329,11 @@ inline static void restartDMOC(void){
 	Board_DCDC_Enable();
 }
 
+void PIOINT0_IRQHandler(void){
+	readTime = true;
+	Chip_GPIO_ClearInts(LPC_GPIO,0,1<<11);
+}
+
 // -------------------------------------------------------------
 // Main Program Loop
 
@@ -345,6 +354,7 @@ int main(void)
 	hvstat.hv_current = 0;
 	state.op_stat=0xF;
 	state.speed=0;
+	sendCount = 0;
 
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
@@ -359,6 +369,8 @@ int main(void)
 	Board_LED_On(LED0);
 	Board_DMOC_Comm_Init();
 	Board_DMOC_Comm_Disable();
+	Board_DCDC_Init();
+	Board_DCDC_Disable();
 	//---------------
 	// Initialize UART Communication
 	Board_UART_Init(UART_BAUD_RATE);
@@ -370,7 +382,7 @@ int main(void)
 	RingBuffer_Init(&can_rx_buffer, _rx_buffer, sizeof(CCAN_MSG_OBJ_T), BUFFER_SIZE);
 	RingBuffer_Flush(&can_rx_buffer);
 
-	Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);	
+	Board_CAN_Init(CCAN_BAUD_RATE, CAN_rx, CAN_tx, CAN_error);
 	msg_obj.msgobj = 1;
 	msg_obj.mode_id = 0x000;
 	msg_obj.mask = 0x000;
@@ -378,6 +390,11 @@ int main(void)
 
 	can_error_flag = false;
 	can_error_info = 0;
+
+	//-----------------------
+	// Initialize MCP2515 CAN Chip
+	Board_MCP2515_Init();
+	Board_MCP2515_Enable_Interrupt();
 
 	// Store the time for the periodic sending of the required CAN messages
 	lasttime = msTicks;
@@ -388,15 +405,31 @@ int main(void)
 		//-----------------------------------------
 		// Process the new CAN messages
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
-			CCAN_MSG_OBJ_T temp_msg;
 			RingBuffer_Pop(&can_rx_buffer, &temp_msg);
+			if(temp_msg.mode_id == ID_THROTTLE){
+				Board_UART_Print("Acceleration: ");
+				Board_UART_PrintNum(temp_msg.data[0],10,true);
+				Board_UART_Print("Breaking: ");
+				Board_UART_PrintNum(temp_msg.data[1],10,true);
+				Board_UART_Print("Error?: ");
+				if(temp_msg.data[2]){
+					Board_UART_Println("Error");
+				}
+				else{
+					Board_UART_Println("No Error");
+				}
+			}
+		}
+
+		if(readTime){
+			readTime = false;
 			//	Increment the count of the messages
 			messagesRecieved++;
-
+			MCP2515_ReadBuffer(&temp_msg, 0);
 			//	If it's a state message, decode the state data
 			if (temp_msg.mode_id == DMOC_STATE_ID)
 				DMOC_Decode_State(&temp_msg,&state);
-			
+
 			// If it's a High Voltage message, decode it
 			else if(temp_msg.mode_id == DMOC_HV_STAT_ID)
 				DMOC_Decode_HV_Status(&temp_msg, &hvstat);
@@ -435,10 +468,20 @@ int main(void)
 			printState();
 			printHVStuff();
 			printTorqueStuff();
+			if(++sendCount>4){
+				sendCount = 0;
+				msg_obj.mode_id = 0x705;
+				msg_obj.msgobj = 2;
+				msg_obj.dlc = 3;
+				msg_obj.data[0] = 0;
+				msg_obj.data[1] = ((hvstat.hv_current) >> 4) & 0xFF;
+				msg_obj.data[2] = hvstat.hv_current & 0xFF;
+				LPC_CCAN_API->can_transmit(&msg_obj);		
+			}
 		}
-		
+
 		//-------------------------------------------
-		// Ramps the speed progressivly up or down. Every 2 
+		// Ramps the speed progressivly up or down. Every 2
 		// milliseconds, change the speed by 1 rpm
 		if(lastRamp < msTicks-2 && targetSpeed<reqSpeed){
 			targetSpeed++;
@@ -463,9 +506,6 @@ int main(void)
 						break;
 					case 't':
 						printTorqueStuff();
-						break;
-					case 'h':
-						printMenu();
 						break;
 					case 'z':
 						Board_UART_Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
@@ -510,6 +550,11 @@ int main(void)
 					case 'g':
 						enableDMOC();
 						break;
+					case 'x':
+						Board_DCDC_Enable();
+						break;
+					case 'c':
+						Board_DCDC_Disable();
 					default:
 						Board_UART_Println("Invalid Command");
 						break;
