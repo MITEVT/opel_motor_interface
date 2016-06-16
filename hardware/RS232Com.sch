@@ -1,0 +1,274 @@
+EESchema Schematic File Version 2
+LIBS:power
+LIBS:device
+LIBS:transistors
+LIBS:conn
+LIBS:linear
+LIBS:regul
+LIBS:74xx
+LIBS:cmos4000
+LIBS:adc-dac
+LIBS:memory
+LIBS:xilinx
+LIBS:microcontrollers
+LIBS:dsp
+LIBS:microchip
+LIBS:analog_switches
+LIBS:motorola
+LIBS:texas
+LIBS:intel
+LIBS:audio
+LIBS:interface
+LIBS:digital-audio
+LIBS:philips
+LIBS:display
+LIBS:cypress
+LIBS:siliconi
+LIBS:opto
+LIBS:atmel
+LIBS:contrib
+LIBS:valves
+LIBS:MITEVT_ANALOG
+LIBS:MITEVT_CONTACTORS
+LIBS:MITEVT_interface
+LIBS:MITEVT_mcontrollers
+LIBS:MITEVT_OPTO
+LIBS:MITEVT_power
+LIBS:MITEVT_REG
+LIBS:final_outline-cache
+EELAYER 25 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 6 6
+Title ""
+Date ""
+Rev ""
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+$Comp
+L MAX232 U601
+U 1 1 575EEA08
+P 5800 3650
+F 0 "U601" H 5350 4500 50  0000 L CNN
+F 1 "MAX232" H 6000 4500 50  0000 L CNN
+F 2 "Housings_SOIC:SOIC-16_3.9x9.9mm_Pitch1.27mm" H 5800 3650 50  0001 C CNN
+F 3 "http://www.ti.com/lit/ds/symlink/max232.pdf" H 5800 3650 50  0001 C CNN
+	1    5800 3650
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR033
+U 1 1 575EEAC8
+P 7100 3600
+F 0 "#PWR033" H 7100 3350 50  0001 C CNN
+F 1 "GND" H 7100 3450 50  0000 C CNN
+F 2 "" H 7100 3600 50  0000 C CNN
+F 3 "" H 7100 3600 50  0000 C CNN
+	1    7100 3600
+	1    0    0    -1  
+$EndComp
+$Comp
+L CP1 C601
+U 1 1 575EEAEC
+P 6700 3350
+F 0 "C601" H 6725 3450 50  0000 L CNN
+F 1 "1μF" H 6725 3250 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0603_HandSoldering" H 6700 3350 50  0001 C CNN
+F 3 "" H 6700 3350 50  0000 C CNN
+	1    6700 3350
+	0    -1   -1   0   
+$EndComp
+$Comp
+L CP1 C602
+U 1 1 575EEB3F
+P 6700 3850
+F 0 "C602" H 6725 3950 50  0000 L CNN
+F 1 "1μF" H 6725 3750 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0603_HandSoldering" H 6700 3850 50  0001 C CNN
+F 3 "" H 6700 3850 50  0000 C CNN
+	1    6700 3850
+	0    1    1    0   
+$EndComp
+$Comp
+L CP1 C603
+U 1 1 575EEBD9
+P 4900 3150
+F 0 "C603" H 4925 3250 50  0000 L CNN
+F 1 "1μF" H 4925 3050 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0603_HandSoldering" H 4900 3150 50  0001 C CNN
+F 3 "" H 4900 3150 50  0000 C CNN
+	1    4900 3150
+	1    0    0    -1  
+$EndComp
+$Comp
+L CP1 C604
+U 1 1 575EEC28
+P 4900 3650
+F 0 "C604" H 4925 3750 50  0000 L CNN
+F 1 "1μF" H 4925 3550 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0603_HandSoldering" H 4900 3650 50  0001 C CNN
+F 3 "" H 4900 3650 50  0000 C CNN
+	1    4900 3650
+	1    0    0    -1  
+$EndComp
+Text HLabel 2700 3050 0    60   Input ~ 0
+TXD
+$Comp
+L R R601
+U 1 1 575EF69E
+P 3850 4300
+F 0 "R601" V 3930 4300 50  0000 C CNN
+F 1 "20k" V 3850 4300 50  0000 C CNN
+F 2 "Resistors_SMD:R_0603" H 3780 4300 50  0001 C CNN
+F 3 "" H 3850 4300 50  0000 C CNN
+	1    3850 4300
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6750 2700 6750 2950
+Wire Wire Line
+	6750 2950 6400 2950
+Wire Wire Line
+	6400 3550 7100 3550
+Wire Wire Line
+	7100 3550 7100 3600
+Wire Wire Line
+	6400 3350 6550 3350
+Wire Wire Line
+	6850 3350 7000 3350
+Wire Wire Line
+	7000 3350 7000 3550
+Connection ~ 7000 3550
+Wire Wire Line
+	6400 3850 6550 3850
+Wire Wire Line
+	6850 3850 6900 3850
+Wire Wire Line
+	6900 3850 6900 3550
+Connection ~ 6900 3550
+Wire Wire Line
+	5200 2950 4900 2950
+Wire Wire Line
+	4900 2950 4900 3000
+Wire Wire Line
+	4900 3300 4900 3350
+Wire Wire Line
+	4900 3350 5200 3350
+Wire Wire Line
+	5200 3450 4900 3450
+Wire Wire Line
+	4900 3450 4900 3500
+Wire Wire Line
+	4900 3800 4900 3850
+Wire Wire Line
+	4900 3850 5200 3850
+Wire Wire Line
+	3300 3350 4100 3350
+Wire Wire Line
+	4100 3350 4100 3500
+Wire Wire Line
+	3800 3200 3800 3350
+Connection ~ 3800 3350
+Wire Wire Line
+	3300 4050 5200 4050
+Wire Wire Line
+	4100 4050 4100 3900
+Wire Wire Line
+	3850 4150 3850 4050
+Connection ~ 3850 4050
+Wire Wire Line
+	3850 4450 3850 4600
+$Comp
+L GND #PWR034
+U 1 1 575EF904
+P 3850 4600
+F 0 "#PWR034" H 3850 4350 50  0001 C CNN
+F 1 "GND" H 3850 4450 50  0000 C CNN
+F 2 "" H 3850 4600 50  0000 C CNN
+F 3 "" H 3850 4600 50  0000 C CNN
+	1    3850 4600
+	1    0    0    -1  
+$EndComp
+Connection ~ 4100 4050
+$Comp
+L BSS138 Q601
+U 1 1 575EFBF2
+P 3200 3700
+F 0 "Q601" H 3400 3775 50  0000 L CNN
+F 1 "2N7002" H 3400 3700 50  0001 L CNN
+F 2 "TO_SOT_Packages_SMD:SOT-23" H 3400 3625 50  0001 L CIN
+F 3 "https://www.fairchildsemi.com/datasheets/2N/2N7002L.pdf" H 3200 3700 50  0001 L CNN
+	1    3200 3700
+	1    0    0    -1  
+$EndComp
+$Comp
+L BSS138 Q602
+U 1 1 575EFC4D
+P 4200 3700
+F 0 "Q602" H 4400 3775 50  0000 L CNN
+F 1 "2N7002" H 4400 3700 50  0001 L CNN
+F 2 "TO_SOT_Packages_SMD:SOT-23" H 4400 3625 50  0001 L CIN
+F 3 "https://www.fairchildsemi.com/datasheets/2N/2N7002L.pdf" H 4200 3700 50  0001 L CNN
+	1    4200 3700
+	-1   0    0    -1  
+$EndComp
+Text HLabel 2700 2800 0    60   Input ~ 0
+RS232_CTRL
+Wire Wire Line
+	2700 2800 4550 2800
+Wire Wire Line
+	4550 2800 4550 3750
+Wire Wire Line
+	2700 3050 2900 3050
+Wire Wire Line
+	2900 3050 2900 3750
+Text HLabel 7250 4150 2    60   Output ~ 0
+RS232_MSG
+Wire Wire Line
+	6400 4050 6600 4050
+Wire Wire Line
+	6600 4050 6600 4150
+Wire Wire Line
+	6600 4150 7250 4150
+NoConn ~ 6400 4150
+NoConn ~ 6400 4250
+NoConn ~ 6400 4350
+NoConn ~ 5200 4350
+NoConn ~ 5200 4250
+NoConn ~ 5200 4150
+Wire Wire Line
+	4550 3750 4400 3750
+Wire Wire Line
+	2900 3750 3000 3750
+Wire Wire Line
+	3300 3350 3300 3500
+Wire Wire Line
+	3300 4050 3300 3900
+$Comp
+L +5V #PWR035
+U 1 1 5762C47C
+P 3800 3200
+F 0 "#PWR035" H 3800 3050 50  0001 C CNN
+F 1 "+5V" H 3800 3340 50  0000 C CNN
+F 2 "" H 3800 3200 50  0000 C CNN
+F 3 "" H 3800 3200 50  0000 C CNN
+	1    3800 3200
+	1    0    0    -1  
+$EndComp
+$Comp
+L +5V #PWR036
+U 1 1 5762C682
+P 6750 2700
+F 0 "#PWR036" H 6750 2550 50  0001 C CNN
+F 1 "+5V" H 6750 2840 50  0000 C CNN
+F 2 "" H 6750 2700 50  0000 C CNN
+F 3 "" H 6750 2700 50  0000 C CNN
+	1    6750 2700
+	1    0    0    -1  
+$EndComp
+$EndSCHEMATC
