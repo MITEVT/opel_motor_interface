@@ -50,9 +50,12 @@ static bool speedset;					// If the speed is currently being set, and the chip s
 static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds
 
 static uint8_t count;					// The amount of data in the UART buffer
-uint32_t lasttime;						// Stores the last time that the required CAN messages were sent
+static uint32_t lasttime;				// Stores the last time that the required CAN messages were sent
 static bool readTime;					// Interrupt flag for needing to read a new CAN message
-uint8_t sendCount;
+static uint8_t sendCount;
+static uint8_t startupSequence;
+
+static uint8_t flg;
 // -------------------------------------------------------------
 // Helper Functions
 
@@ -355,6 +358,8 @@ int main(void)
 	state.op_stat=0xF;
 	state.speed=0;
 	sendCount = 0;
+	flg = 0;
+	startupSequence = 0;
 
 	//---------------
 	// Initialize SysTick Timer to generate millisecond count
@@ -407,16 +412,19 @@ int main(void)
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			RingBuffer_Pop(&can_rx_buffer, &temp_msg);
 			if(temp_msg.mode_id == ID_THROTTLE){
-				Board_UART_Print("Acceleration: ");
-				Board_UART_PrintNum(temp_msg.data[0],10,true);
-				Board_UART_Print("Breaking: ");
-				Board_UART_PrintNum(temp_msg.data[1],10,true);
-				Board_UART_Print("Error?: ");
-				if(temp_msg.data[2]){
-					Board_UART_Println("Error");
-				}
-				else{
-					Board_UART_Println("No Error");
+		//		Board_UART_Print("Speed Req: ");
+		//		Board_UART_PrintNum(temp_msg.data[0],10,true);
+		//		Board_UART_Print("Breaking: ");
+		//		Board_UART_PrintNum(temp_msg.data[1],10,true);
+		//		Board_UART_Print("Error?: ");
+		//		if(temp_msg.data[2]){
+		//			Board_UART_Println("Error");
+		//		}
+		//		else{
+		//			Board_UART_Println("No Error");
+		//		}
+				if((temp_msg.data[0]*4)<1100){
+		//			reqSpeed=temp_msg.data[0]*4;
 				}
 			}
 		}
@@ -437,6 +445,42 @@ int main(void)
 			// If it's a torque message, decode it
 			else if (temp_msg.mode_id == DMOC_TORQUE_STAT_ID)
 				torqueStat = DMOC_Decode_Torque_Status(&temp_msg);
+			else
+				Board_UART_PrintNum(temp_msg.mode_id,16,true);
+		}
+
+		switch(startupSequence){
+			case(0):
+				break;
+			case(1):
+				Board_DCDC_Enable();
+				_delay(100);
+				enableDMOC();
+				startupSequence = 2;
+				break;
+			case(2):
+				if(state.op_stat == DISABLED){
+					targetState = 1;
+					startupSequence = 3;
+				}
+				break;
+			case(3):
+				if(state.op_stat == STANDBY){
+					targetState = 2;
+					startupSequence = 4;
+				}
+				break;
+			case(4):
+				if(state.op_stat == ENABLED){
+					targetGear = 1;
+					startupSequence = 5;
+				}
+				break;
+			case(5):
+				break;
+			default:
+				Board_UART_Println("Severe Error");
+				break;
 		}
 
 
@@ -472,10 +516,15 @@ int main(void)
 				sendCount = 0;
 				msg_obj.mode_id = 0x705;
 				msg_obj.msgobj = 2;
-				msg_obj.dlc = 3;
+				msg_obj.dlc = 8;
 				msg_obj.data[0] = 0;
 				msg_obj.data[1] = ((hvstat.hv_current) >> 4) & 0xFF;
 				msg_obj.data[2] = hvstat.hv_current & 0xFF;
+				msg_obj.data[3] = (state.speed & 0xFF0)>>4;
+				msg_obj.data[4] = ((state.speed & 0x00F)<<4) | ((hvstat.hv_voltage & 0xF00)>>8);
+				msg_obj.data[5] = (hvstat.hv_voltage & 0x0FF);
+				msg_obj.data[6] = (torqueStat & 0xFF00)>>8;
+				msg_obj.data[7] = (torqueStat & 0xFF);
 				LPC_CCAN_API->can_transmit(&msg_obj);		
 			}
 		}
@@ -483,12 +532,12 @@ int main(void)
 		//-------------------------------------------
 		// Ramps the speed progressivly up or down. Every 2
 		// milliseconds, change the speed by 1 rpm
-		if(lastRamp < msTicks-2 && targetSpeed<reqSpeed){
-			targetSpeed++;
+		if(lastRamp < msTicks-2 && targetSpeed<reqSpeed-1){
+			targetSpeed+=2;
 			lastRamp = msTicks;
 		}
-		else if(lastRamp < msTicks-2 && targetSpeed>reqSpeed){
-			targetSpeed--;
+		else if(lastRamp < msTicks-2 && targetSpeed>reqSpeed+1){
+			targetSpeed-=2;
 			lastRamp = msTicks;
 		}
 
@@ -555,6 +604,18 @@ int main(void)
 						break;
 					case 'c':
 						Board_DCDC_Disable();
+						break;
+					case '+':
+						if(reqSpeed<2000)
+							reqSpeed+=100;
+						break;
+					case '-':
+						if(reqSpeed>0)
+							reqSpeed-=100;
+						break;
+					case '4':
+						startupSequence = 1;
+						break;
 					default:
 						Board_UART_Println("Invalid Command");
 						break;
