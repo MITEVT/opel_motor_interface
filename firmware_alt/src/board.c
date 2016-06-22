@@ -184,6 +184,13 @@ void Board_MCP2515_Init(void){
 	MCP2515_BitModify(CANCTRL, MODE_MASK | CLKEN_MASK | CLKPRE_MASK, MODE_NORMAL | CLKEN_ENABLE | CLKPRE_CLKDIV_1);
 }
 
+void Board_MCP2515_Reboot(void){
+	MCP2515_Reset();
+	MCP2515_SetBitRate(500, 12, 1);
+	MCP2515_BitModify(RXB0CTRL, RXM_MASK, RXM_OFF);
+	MCP2515_BitModify(CANCTRL, MODE_MASK | CLKEN_MASK | CLKPRE_MASK, MODE_NORMAL | CLKEN_ENABLE | CLKPRE_CLKDIV_1);
+}
+
 void Board_MCP2515_Enable_Interrupt(void){
 	Chip_GPIO_SetupPinInt(LPC_GPIO,0,11,GPIO_INT_FALLING_EDGE);
 	Chip_GPIO_EnableInt(LPC_GPIO,0,1<<11);
@@ -195,6 +202,6 @@ void Board_MCP2515_ClearInterrupt(void){
 }
 
 void Board_MCP2515_Transmit(CCAN_MSG_OBJ_T *msg_obj){
-	MCP2515_LoadBuffer(0,&msg_obj);
+	MCP2515_LoadBuffer(0,msg_obj);
 	MCP2515_SendBuffer(0);
 }

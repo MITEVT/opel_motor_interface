@@ -45,6 +45,7 @@ volatile uint32_t msTicks; 						/** @brief System Time (ms) **/
 //--------------------------------------------------------------
 // CAN ID Definitions
 #define ID_THROTTLE 0x301
+#define ID_DI		0x505
 
 // -------------------------------------------------------------
 // Computed Macros
@@ -176,5 +177,7 @@ void Board_MCP2515_Enable_Interrupt(void);
 void Board_MCP2515_ClearInterrupt(void);
 
 void Board_MCP2515_Transmit(CCAN_MSG_OBJ_T *msg_obj);
+
+void Board_MCP2515_Reboot(void);
 
 #endif

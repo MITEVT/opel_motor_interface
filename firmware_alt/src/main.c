@@ -379,7 +379,7 @@ int main(void)
 	//---------------
 	// Initialize UART Communication
 	Board_UART_Init(UART_BAUD_RATE);
-//	Board_UART_Println("Started up");
+	Board_UART_Println("Started up");
 
 	//---------------
 	// Initialize CAN  and CAN Ring Buffer
@@ -412,21 +412,53 @@ int main(void)
 		if (!RingBuffer_IsEmpty(&can_rx_buffer)) {
 			RingBuffer_Pop(&can_rx_buffer, &temp_msg);
 			if(temp_msg.mode_id == ID_THROTTLE){
-		//		Board_UART_Print("Speed Req: ");
-		//		Board_UART_PrintNum(temp_msg.data[0],10,true);
-		//		Board_UART_Print("Breaking: ");
-		//		Board_UART_PrintNum(temp_msg.data[1],10,true);
-		//		Board_UART_Print("Error?: ");
-		//		if(temp_msg.data[2]){
-		//			Board_UART_Println("Error");
-		//		}
-		//		else{
-		//			Board_UART_Println("No Error");
-		//		}
 				if((temp_msg.data[0]*4)<1100){
-		//			reqSpeed=temp_msg.data[0]*4;
+					reqSpeed=temp_msg.data[0]*4;
 				}
 			}
+			else{
+				Board_UART_PrintNum(temp_msg.mode_id,16,true);
+			}
+			if(temp_msg.mode_id == ID_DI){
+				Board_UART_PrintNum(temp_msg.data_16[1],16,true);
+				if(temp_msg.data_16[1]==0xF0){
+					if(startupSequence == 0){
+						startupSequence = 1;
+					}
+					else if(startupSequence == 4){
+						targetGear = 1;
+						targetTorque=1000;
+					}
+				}
+				else if(temp_msg.data_16[1]==0x30){
+					if(startupSequence == 0){
+						startupSequence = 1;
+					}
+					else if(startupSequence == 4){
+						targetGear = 2;
+						targetTorque=1000;
+					}
+				}
+				else if(temp_msg.data_16[1] == 0){
+					targetGear = 0;
+					targetTorque = 0;
+				}
+				else if(temp_msg.data_16[1]==0x0F00){
+					startupSequence = 6;
+				}
+				else if(temp_msg.data_16[1]==0x0300){
+					
+				}
+				else if(temp_msg.data_16[1]==0xF000){
+					
+				}
+				else if(temp_msg.data_16[1]==0x3000){
+					
+				}
+				else{
+					
+				}
+			}	
 		}
 
 		if(readTime){
@@ -472,11 +504,26 @@ int main(void)
 				break;
 			case(4):
 				if(state.op_stat == ENABLED){
-					targetGear = 1;
 					startupSequence = 5;
 				}
 				break;
 			case(5):
+				break;
+			case(6):
+				targetState = 1;
+				startupSequence = 7;
+				break;
+			case(7):
+				if(state.op_stat == STANDBY){
+					targetState = 0;
+					startupSequence = 8;
+				}
+				break;
+			case(8):
+				if(state.op_stat == DISABLED){
+					Board_DCDC_Disable();
+					startupSequence = 0;
+				}
 				break;
 			default:
 				Board_UART_Println("Severe Error");
@@ -509,9 +556,9 @@ int main(void)
 			_delay(20);
 			sendThree();
 			heartVal = (heartVal+2) & 0x0F;
-			printState();
-			printHVStuff();
-			printTorqueStuff();
+//			printState();
+//			printHVStuff();
+//			printTorqueStuff();
 			if(++sendCount>4){
 				sendCount = 0;
 				msg_obj.mode_id = 0x705;
@@ -539,114 +586,6 @@ int main(void)
 		else if(lastRamp < msTicks-2 && targetSpeed>reqSpeed+1){
 			targetSpeed-=2;
 			lastRamp = msTicks;
-		}
-
-		//-------------------------------------------
-		// Process UART Input from the user
-		//
-		if ((count = Board_UART_Read(uart_rx_buffer, BUFFER_SIZE)) != 0) {
-			if(!speedset){
-				switch (uart_rx_buffer[0]) {
-					case 's':
-						printState();
-						break;
-					case 'v':
-						printHVStuff();
-						break;
-					case 't':
-						printTorqueStuff();
-						break;
-					case 'z':
-						Board_UART_Println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-						break;
-					case '1':
-						targetState = 1;
-						break;
-					case '2':
-						targetState = 2;
-						break;
-					case '0':
-						targetState = 0;
-						break;
-					case 'n':
-						targetGear = 0;
-						break;
-					case 'f':
-						targetGear = 1;
-						break;
-					case 'r':
-						targetGear = 2;
-						break;
-					case 'p':
-						reqSpeed = 1000;
-						Board_UART_Println("Setting Speed to 1000 rmp");
-						break;
-					case 'l':
-						reqSpeed = 0;
-						targetSpeed = 0;
-						break;
-					case 'o':
-						targetTorque = 1000;
-						break;
-					case 'k':
-						targetTorque = 0;
-						break;
-					case 'b':
-						Board_UART_Println("Set a target speed in rpm");
-						speedset = true;
-						testSpeed = 0;
-						break;
-					case 'g':
-						enableDMOC();
-						break;
-					case 'x':
-						Board_DCDC_Enable();
-						break;
-					case 'c':
-						Board_DCDC_Disable();
-						break;
-					case '+':
-						if(reqSpeed<2000)
-							reqSpeed+=100;
-						break;
-					case '-':
-						if(reqSpeed>0)
-							reqSpeed-=100;
-						break;
-					case '4':
-						startupSequence = 1;
-						break;
-					default:
-						Board_UART_Println("Invalid Command");
-						break;
-				}
-			}
-			//--------------------------------------------
-			// Prepare for a numerical speed input
-			else{
-				char tmp = uart_rx_buffer[0];
-				Board_UART_SendBlocking(&tmp, 1);
-				if (tmp>47 && tmp<58){
-						testSpeed = (testSpeed * 10)+(tmp-48);
-				}
-				else if(uart_rx_buffer[0] == '\n'){
-					Board_UART_Println("");
-					if(testSpeed < 2500){
-						Board_UART_Print("Setting Speed in rpm to: ");
-						Board_UART_PrintNum(testSpeed,10,true);
-						reqSpeed = testSpeed;
-					}
-					else{
-						Board_UART_Println("Speed out of bounds");
-					}
-				//	Board_UART_Println("---------------------------------------\n");
-					speedset = false;
-				}
-				else{
-					Board_UART_Println("Invalid speed");
-					speedset = false;
-				}
-			}
 		}
 	}
 }
