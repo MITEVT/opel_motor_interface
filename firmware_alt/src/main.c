@@ -547,8 +547,8 @@ int main(void)
 		}
 
 		//--------------------------------------------
-		// Every .25 seconds, transmit the required CAN messages
-		if(lasttime < msTicks-250){
+		// Every .2 seconds, transmit the required CAN messages
+		if(lasttime < msTicks-200){
 			lasttime = msTicks;
 			sendOne();
 			_delay(20);
@@ -559,13 +559,13 @@ int main(void)
 //			printState();
 //			printHVStuff();
 //			printTorqueStuff();
-			if(++sendCount>4){
+			if(++sendCount>5){
 				sendCount = 0;
 				msg_obj.mode_id = 0x705;
 				msg_obj.msgobj = 2;
 				msg_obj.dlc = 8;
-				msg_obj.data[0] = 0;
-				msg_obj.data[1] = ((hvstat.hv_current) >> 4) & 0xFF;
+				msg_obj.data[0] = state.op_stat<<4;
+				msg_obj.data[1] = ((hvstat.hv_current) >> 8) & 0xFF;
 				msg_obj.data[2] = hvstat.hv_current & 0xFF;
 				msg_obj.data[3] = (state.speed & 0xFF0)>>4;
 				msg_obj.data[4] = ((state.speed & 0x00F)<<4) | ((hvstat.hv_voltage & 0xF00)>>8);
