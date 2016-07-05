@@ -145,8 +145,14 @@ inline static void sendOne(void){
 	msg_obj1.msgobj = 2;
 	msg_obj1.mode_id = 0x232;
 	msg_obj1.dlc = 8;
-	msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
-	msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
+	if(targetGear == 1){
+		msg_obj1.data[0] = ((20000+targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+		msg_obj1.data[1] = ((20000+targetSpeed) & 0xFF); // Speed Request: LSB
+	}
+	else{
+		msg_obj1.data[0] = ((20000-targetSpeed) & 0xFF00)>>8;	// Speed Request: MSB
+		msg_obj1.data[1] = ((20000-targetSpeed) & 0xFF); // Speed Request: LSB	
+	}
 	msg_obj1.data[2] = 0x00; // Not Used
 	msg_obj1.data[3] = 0x00; // Not Used
 	msg_obj1.data[4] = 0x00; // Not Used
