@@ -28,7 +28,7 @@ static CCAN_MSG_OBJ_T msg_obj3;
 
 
 static char str[100];							// Used for composing UART messages
-static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
+//static uint8_t uart_rx_buffer[BUFFER_SIZE]; 	// UART received message buffer
 
 static bool can_error_flag;
 static uint32_t can_error_info;
@@ -47,9 +47,9 @@ static uint16_t targetTorque;			// The torque that we would like to motor contro
 static uint16_t reqSpeed;				// The speed that we would like the motor controller to spin the motor
 static uint32_t lastRamp;				// The last time the speed was increased, used to make a more gentle ramp with speed changes
 static bool speedset;					// If the speed is currently being set, and the chip should look for numerical inputs
-static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds
+//static uint16_t testSpeed;				// Used to assemble the speed input and verify that it is within reasonable bounds
 
-static uint8_t count;					// The amount of data in the UART buffer
+//static uint8_t count;					// The amount of data in the UART buffer
 static uint32_t lasttime;				// Stores the last time that the required CAN messages were sent
 static bool readTime;					// Interrupt flag for needing to read a new CAN message
 static uint8_t sendCount;
@@ -157,7 +157,12 @@ inline static void sendOne(void){
 	msg_obj1.data[3] = 0x00; // Not Used
 	msg_obj1.data[4] = 0x00; // Not Used
 	msg_obj1.data[5] = 0x01; // Set Key Mode (off: 0; On: 1; Reserved: 2; NoAction: 3)
-	msg_obj1.data[6] = heartVal|(targetState<<6)|(targetGear<<4); // alive time, gear, state
+	if(startupSequence==5){
+		msg_obj1.data[6] = heartVal|(targetState<<6)|(targetGear<<4); // alive time, gear, state
+	}
+	else{
+		msg_obj1.data[6] = heartVal|(targetState<<6);
+	}
 	msg_obj1.data[7] = DMOC_Checksum(msg_obj1); // Checksum
 	Board_MCP2515_Transmit(&msg_obj1);
 }
@@ -335,7 +340,8 @@ inline static void enableDMOC(void){
 inline static void restartDMOC(void){
 	Board_DCDC_Disable();
 	_delay(100);
-	Board_DCDC_Enable();
+	startupSequence = 0;
+	targetState = 0;
 }
 
 void PIOINT0_IRQHandler(void){
@@ -431,7 +437,7 @@ int main(void)
 					if(startupSequence == 0){
 						startupSequence = 1;
 					}
-					else if(startupSequence == 4){
+					else if(startupSequence == 5){
 						targetGear = 1;
 						targetTorque=1000;
 					}
@@ -440,10 +446,10 @@ int main(void)
 					if(startupSequence == 0){
 						startupSequence = 1;
 					}
-					else if(startupSequence == 4){
+					else if(startupSequence == 5){
 						targetGear = 2;
 						targetTorque=1000;
-					}
+					}	
 				}
 				else if(temp_msg.data_16[1] == 0){
 					targetGear = 0;
